@@ -1,7 +1,7 @@
 # 本地自升级流程
 
 > Type: `general`
-> Updated: `2026-04-27`
+> Updated: `2026-10-22`
 > Summary: 说明 repo 构建产物触发本地自升级时的完整时序、内嵌 upgrade shim 的释放与启动方式、与 `/upgrade dev` 的边界、自动回滚规则，以及 repo install target 与当前 daemon self target 的语义边界。
 
 ## 1. 这份文档回答什么问题
@@ -284,6 +284,7 @@ helper shim 入口是一个独立 binary，本身不再接受 `upgrade-helper -s
 3. 停掉当前 daemon/service
    - 当前实现不会只看 `stop` 命令是否已发出
    - 只有在 helper 确认旧 daemon/service 已真正退出后，才会继续进入 binary 切换
+   - macOS 必须等到 `launchctl print` 确认旧服务已被卸载；`SIGTERMed`、`exited` 等非 running 状态仍可能占着服务标签，此时启动新版或回退版都会失败。
 4. 若 `CurrentBinaryPath` 位于 `VersionsRoot` 下（legacy version-scoped 入口），先迁移到 canonical 无版本稳定入口，再把 `PendingUpgrade.TargetBinaryPath` 复制覆盖到迁移后的 `CurrentBinaryPath`
 5. 把 phase 改成 `observing`
 6. 用新的 live binary 重新启动 daemon/service

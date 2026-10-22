@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-10-22`
-> Summary: 增加空闲 Codex 的 /desk 桌面交接，区分连接断开与进程退出；保留此前的会话归属与桌面名称同步修正。
+> Summary: 增加空闲 Codex 的 /desk 桌面交接，区分连接断开与进程退出；修复自动恢复中接管被拒绝却误报成功导致的重复通知。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -215,8 +215,9 @@ surface 不是单一枚举，而是五层正交状态叠加。
          2. `profile_definition_incomplete`、`profile_secret_missing`、`oauth_missing`、`oauth_probe_unknown`、`oauth_deployment_unsupported`、`codex_capability_unsupported`、`codex_probe_contract_mismatch`、`managed_model_catalog_missing`、`profile_revision_unavailable` 以及 restore workspace/cwd/runtime 等确定性失败会成为该 episode 的 terminal cause，发出一次具体提示后不再由 tick 重试；`codex_binary_unavailable`、`codex_probe_timeout`、`codex_probe_unavailable` 属于环境类失败，在后台自动恢复里只记录 backoff，TTL 到期后重新探测，不立即打扰用户；`thread_not_found` / `headless_restore_thread_not_found` 不属于 terminal cause，在后台自动恢复里只记录 backoff；
          3. 真正恢复成功，或 persisted target / backend / profile/provider 发生变化时，会清掉 terminal/sticky failure；用户显式重新选择或恢复仍可发起新的执行尝试；
          4. retryable 失败后续即使观测到 `workspace_busy` / `thread_busy` / `thread_not_found` 这类派生状态，也不会改写已经建立的更具体根因；同一根因在同一恢复 episode 里不会重复刷失败卡。
-         5. daemon 同步 headless 恢复运行态时，只把 `surfaceID / ProductMode / Backend / provider/profile / ResumeThreadID / ResumeThreadCWD / ResumeWorkspaceKey / ResumeRouteMode / ResumeHeadless` 视为“恢复目标身份”；`ResumeInstanceID` 只作为 exact visible instance 优先尝试的执行 hint，不再决定 headless episode identity；`ResumeThreadTitle`、gateway/chat/actor、verbosity、更新时间等展示或投递元数据变化只刷新 entry，不重置 `NextAttemptAt`、`LastNoticeCode` 或 sticky failure。
-         6. daemon 在 auto-restore 启动 managed headless 前会检查最终 `WorkDir` 是否仍存在且是目录；不存在时返回 `headless_restore_workspace_missing`，发一次可诊断提示并把本 episode 标为 terminal，直到用户 `/list`、`/use`、`/new` 或目标合同改变前不再按 tick 盲 retry。
+         5. 复用已有 headless 实例时，接管被 workspace/thread claim 拒绝也必须返回 `Failed`，交给相同的失败 gate 保留 backoff；不能仅因找到了候选实例就返回 `ThreadAttached` 并清除退避。
+         6. daemon 同步 headless 恢复运行态时，只把 `surfaceID / ProductMode / Backend / provider/profile / ResumeThreadID / ResumeThreadCWD / ResumeWorkspaceKey / ResumeRouteMode / ResumeHeadless` 视为“恢复目标身份”；`ResumeInstanceID` 只作为 exact visible instance 优先尝试的执行 hint，不再决定 headless episode identity；`ResumeThreadTitle`、gateway/chat/actor、verbosity、更新时间等展示或投递元数据变化只刷新 entry，不重置 `NextAttemptAt`、`LastNoticeCode` 或 sticky failure。
+         7. daemon 在 auto-restore 启动 managed headless 前会检查最终 `WorkDir` 是否仍存在且是目录；不存在时返回 `headless_restore_workspace_missing`，发一次可诊断提示并把本 episode 标为 terminal，直到用户 `/list`、`/use`、`/new` 或目标合同改变前不再按 tick 盲 retry。
    5. `vscode` mode surface 会按 persisted `ResumeInstanceID` 继续尝试恢复：
       1. 先做本机 VS Code 兼容性检查：
          1. 若检测到旧版 `settings.json` override，或当前 managed shim 已失效，则保持 detached，并发迁移/修复卡片。

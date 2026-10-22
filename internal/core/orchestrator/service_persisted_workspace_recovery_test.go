@@ -114,6 +114,7 @@ func TestPersistedWorkspaceRecoveryPreservesStableRoots(t *testing.T) {
 		knownChild   bool
 		nativeNewer  bool
 		persistedKey bool
+		savedRoot    string
 		wantChild    bool
 	}{
 		{name: "ordinary subdirectory keeps root", cwd: "src"},
@@ -121,6 +122,11 @@ func TestPersistedWorkspaceRecoveryPreservesStableRoots(t *testing.T) {
 		{name: "a deeper working directory keeps its known workspace", cwd: "memory/src", knownChild: true, wantChild: true},
 		{name: "newer native root remains authoritative", cwd: "memory", knownChild: true, nativeNewer: true},
 		{name: "explicit persisted root remains authoritative", cwd: "memory", knownChild: true, persistedKey: true},
+		{name: "saved nested workspace needs no runtime", cwd: "memory", savedRoot: "memory", wantChild: true},
+		{name: "saved root also covers deeper cwd", cwd: "memory/src", savedRoot: "memory", wantChild: true},
+		{name: "ordinary child cwd retains saved parent root", cwd: "src", savedRoot: "."},
+		{name: "newer native root beats saved child", cwd: "memory", savedRoot: "memory", nativeNewer: true},
+		{name: "explicit persisted root beats saved child", cwd: "memory", savedRoot: "memory", persistedKey: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			now := time.Date(2026, 10, 20, 6, 0, 0, 0, time.UTC)
@@ -145,7 +151,11 @@ func TestPersistedWorkspaceRecoveryPreservesStableRoots(t *testing.T) {
 			if tc.persistedKey {
 				row.WorkspaceKey = parent
 			}
-			svc.SetPersistedThreadCatalog(&fakePersistedThreadCatalog{recent: []state.ThreadRecord{row}, byID: map[string]state.ThreadRecord{"thread": row}})
+			workspaces := map[string]time.Time{}
+			if tc.savedRoot != "" {
+				workspaces[filepath.Join(parent, tc.savedRoot)] = now.Add(-time.Minute)
+			}
+			svc.SetPersistedThreadCatalog(&fakePersistedThreadCatalog{recent: []state.ThreadRecord{row}, recentWorkspaces: workspaces, byID: map[string]state.ThreadRecord{"thread": row}})
 			want := parent
 			if tc.wantChild {
 				want = child

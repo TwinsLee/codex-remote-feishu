@@ -195,7 +195,8 @@ func (s *Service) mergedThreadViewForBackend(surface *state.SurfaceConsoleRecord
 				view.Thread = cloneThreadRecord(thread)
 				view.Backend = backend
 			} else {
-				view.Thread = s.mergePersistedThreadMetadata(view.Thread, thread, backend)
+				workspaces := s.catalog.recentPersistedWorkspacesForBackend(backend, persistedRecentWorkspaceLimit)
+				view.Thread = s.mergePersistedThreadMetadata(view.Thread, thread, backend, workspaces)
 			}
 		}
 	}

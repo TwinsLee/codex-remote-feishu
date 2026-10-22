@@ -514,6 +514,8 @@ func TestGoalCommandCardFlowPatchesLoadingAndResultOnSameMessage(t *testing.T) {
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 		MessageID:        "om-goal-card-1",
+		ThreadID:         "thread-1",
+		InstanceID:       instanceID,
 		Text:             "/goal pause",
 		CatalogFamilyID:  control.FeishuCommandGoal,
 		CatalogVariantID: "goal.codex.normal",

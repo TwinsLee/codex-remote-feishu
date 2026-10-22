@@ -703,7 +703,8 @@ Codex 名称投影：SQLite catalog 兼容读取可选 `name` 列，显式名称
    3. 如果当前 workspace 虽然已选中，但 surface 处于 unbound / detached，或者当前路由并不属于这个 workspace，则会话下拉保持空值，不再回退到“第一个可恢复 thread”。
    4. 只要用户随后切换了工作区，当前会话选择就会被显式清空，卡片回到“未选会话”占位态；必须重新选择后才能 confirm，不再 silent fallback 到新的默认会话。
    5. 工作区下拉只显示真实 workspace，不再混入动作型来源项；busy Git workspace 在 `/workspace list` / `/list` 中会以“仅 Worktree base”能力出现，busy 非 Git workspace 与不可接管 workspace 不进入主路径。
-   6. workspace label 足够时只显示 label；只有 basename 冲突时，才会额外补路径 meta 做消歧。
+   6. workspace 下拉固定只显示末级目录名，完整路径在选中后的下方核对区展示；重名不触发另一套标签格式。会话下拉将最近活动时间前置，随后显示真实会话名称；会话完整名称和会话工作目录在其下方单独展示，不以工作区前缀或内部 ID 代替。为控制卡片大小，下拉名称最多显示 80 字符、详情最多 1,000 字符，超长明确标注截断；processing 与终态也限制显示长度，原始名称与路由不变。
+   7. 两个下拉撑满所在布局的可用宽度；已有默认选择、排序和分页规则不变。时间复用 `LastUsedAt`，从本机持久会话恢复时来自 `updated_at`，也会随 Remote 使用会话而更新，不等同于最后一条消息时间。
 5. `/workspace new dir`、`/workspace new git` 与 `/workspace new worktree` 的主卡会直接打开各自业务页，不再先经过共同的模式 / 来源向导。
    1. `从目录新建` 主卡会显示路径字段、`选择目录` 按钮与 `接入并继续` 主按钮。
    2. `从 GIT URL 新建` 主卡会内联保存 `repo_url` / `directory_name` 草稿，并通过 `target_picker_open_path_picker` 选择父目录；底部动作为 `取消 / 上一步 / 克隆并继续`。
@@ -1785,7 +1786,8 @@ transport degraded retained attachment
    1. resume failure / VS Code open prompt 仍以 source 侧恢复 backoff 为主，helper 只额外做短窗去重，避免同批次重复弹出
    2. `attached_instance_transport_degraded` 当前按 `surface + family + code` 做短窗节流，避免离线抖动时连续刷同一张系统提示
    3. `daemon_shutting_down` 当前仍是一轮 shutdown 里每 surface 最多一条，并附带较长 dedupe 窗口
-   4. `gateway_apply_failed` 当前会先排入 daemon 的 pending runtime notice 队列，待下一次正常 gateway apply 成功前置冲刷；同 surface 同 family 的重复错误会按 dedupe key 收敛
+   4. `gateway_apply_failed` 当前先排入 daemon 的 pending runtime notice 队列，并在同批 UI 处理结束时尝试投递；若本批已经前置冲刷过该 surface 的旧通知，则不再批末重试。每个 surface 每批最多冲刷一次，投递仍失败时保留到下一批；同 surface 同 family 的重复错误按 dedupe key 收敛，不重放原 UI 操作或 Goal 命令。
+   5. 投递错误提示先查询状态确认实际操作结果，不引导盲目重复提交。明确的 `im.v1.message.patch / 230001 / This message is NOT a card` 归为不可重试的结构错误；其他已有错误分类规则保持不变。
 12. 因此，后续若新增真正属于 runtime 层的提示，默认应进入这条独立车道，而不是继续直接手写普通 `UIEventNotice`。
 
 ## 6. 命令矩阵
@@ -2063,15 +2065,15 @@ retained-offline overlay 额外规则：
 18. OpenCode `/plan` 是否只通过 `PlanMode + PlanModeOverrideSet` 表达飞书显式 override：`on/off` 冻结到 queue item 并在 ACP prompt 前动态设置 `mode=plan/build`，`clear` 后不冻结也不 dispatch mode；`config_option_update id=mode` 是否能投影最近观察 mode，且自定义 mode 不被折算成 off。
 19. OpenCode ACP preflight 是否在同一 prompt 中按 deterministic 顺序先设置 `mode` 再设置 `effort`，全部成功后才发送 `session/prompt`；`config_option_update id=effort` 是否刷新 observed reasoning，并且 `effort not found` / unsupported model 不会被当作成功 prompt。
 
-2026-08-15 #895 补充：Codex active Goal thread 的 backend-observed turn 与普通队列互锁已并入 dispatch/recovery 主链。`thread/goal/set|get|clear` 与 `thread/read(includeTurns=false)` 成为 typed control carrier；`turn/started` 在目标 thread 的 authoritative Goal status 为 active 且无 remote binding 时记录为 backend-observed active turn（不伪造 continuation provenance），进入 Steer target，并在 completion/error/interrupt/disconnect 时按同一 turn-lifecycle owner 清理。普通队列第一条目标消息入队即创建 durable `pause_pending` lease 并发送 `thread/goal/set(paused)`；pause 确认后以 `thread/read` 的 live `idle` 状态为屏障进入 `draining`，之后才派发普通 prompt；Goal turn 完成即使无 remote binding 也会推进命中同 instance+thread 的等待队列；队列排空且 Goal fingerprint（createdAt/objective/budget）与 lease 快照一致时自动 resume，任何外部 mutation / RPC 失败 / fingerprint 漂移都 fail-closed 放弃自动恢复。lease 持久化到 daemon state，重启后按 phase 重发 pause/probe/get。
+2026-08-15 #895 补充：Codex active Goal thread 的 backend-observed turn 与普通队列互锁已并入 dispatch/recovery 主链。`thread/goal/set|get|clear` 与 `thread/read(includeTurns=false)` 成为 typed control carrier；`turn/started` 在目标 thread 的 authoritative Goal status 为 active 且无 remote binding 时记录为 backend-observed active turn（不伪造 continuation provenance），进入 Steer target，并在 completion/error/interrupt/disconnect 时按同一 turn-lifecycle owner 清理。普通队列第一条目标消息入队即创建 durable `pause_pending` lease 并发送 `thread/goal/set(paused)`；pause 确认后以 `thread/read` 的 live `idle` 状态为屏障进入 `draining`，之后才派发普通 prompt；Goal turn 完成即使无 remote binding 也会推进命中同 instance+thread 的等待队列；队列排空、Goal 仍为 `paused` 且 fingerprint（createdAt/objective/budget）与 lease 快照一致时自动 resume，任何外部 mutation / RPC 失败 / fingerprint 漂移都 fail-closed 放弃自动恢复。lease 持久化到 daemon state，重启后按 phase 重发 pause/probe/get。
 
 2026-08-15 #895 review 修复补充：pause 失败进入退避窗口后，dispatch 门禁在整个退避期内保持阻塞（节流只是抑制重复提示，不会让 `maybeBeginGoalInterlockForQueueItem` 的 nil 落到派发路径）；`thread/goal/set` 响应缺失 `updatedAt`（或整体无 goal 快照）时，有序流中下一条该 thread 的 goal notification 视为本命令确认并消费一次，避免 pause 确认被误判为 external mutation 而永久放弃自动恢复；goal 命令结果只在 commandID 能关联到 pending 命令时才写回本地 thread goal，未知/stale 响应不再覆盖已更新的快照。
 
 2026-08-15 #897 补充：`/access` 与 `/plan` 改为会话级（surface 级）设置。飞书群聊与私聊各自独立持久化（surface resume state 新增 `AccessMode`，恢复 `PlanMode`/`PlanModeOverrideSet`），群聊可直接执行这两个命令，不再被“机器人设置仅私聊可改”的 gate 拦截；`EffectiveSurfaceCapabilitySettings` 对飞书 surface 的 access/plan 读 surface 字段，bot record 投影不再覆盖会话值。旧版机器人级 access/plan 在 daemon 启动恢复时一次性种子到已存在 surface 后不再作为读路径。`/mode`、profile、`/model`、`/reasoning` 仍为机器人级（仅私聊可改）。
 
-2026-08-15 #896 补充：Codex Goal 用户控制面已接入现有命令卡体系。`/goal` 是 config-flow slash command（复用 `FeishuCatalogConfigView` / `FeishuPageView` / 菜单三态 / owner card 状态机）：bare `/goal` 发 `thread/goal/get`（`user_control` provenance）并回显 Goal 状态页；`/goal new|edit <目标> [--budget N]` 创建/编辑，`/goal pause|resume` 动态生效，`/goal clear` 先出确认卡、`--confirm` 后清除；无精确 selected thread / 非 Codex / Review/helper 会话 fail closed。用户动作携带 `user_control`，会撤销 queue interlock 的自动恢复所有权；状态页通过现有 `pageEvent` inline replace 刷新，不新建第二套卡片 carrier。
+2026-08-15 #896 补充：Codex Goal 用户控制面已接入现有命令卡体系。`/goal` 是 config-flow slash command（复用 `FeishuCatalogConfigView` / `FeishuPageView` / 菜单三态 / owner card 状态机）：bare `/goal` 发 `thread/goal/get`（`user_control` provenance）并回显 Goal 状态页；`/goal new|edit <目标> [--budget N]` 创建/编辑，`/goal pause|resume` 动态生效，`/goal clear` 先出确认卡、`--confirm` 后清除；无精确 selected thread / 非 Codex / Review/helper 会话 fail closed。用户动作携带 `user_control`；成功的创建/编辑/暂停/恢复/清除会撤销 queue interlock 的自动恢复所有权，查询不会撤销。若仍处于 `pause_pending` / `quiescing`，只撤销自动恢复权，保留原 idle 屏障；通过 idle 屏障的旧 lease 可直接退役，后续输入重新建立暂停保护；早期保留的屏障在队列排空后清理。状态页复用现有 `pageEvent`：文字入口发新卡，有效卡片入口原位刷新，不新建第二套卡片 carrier。
 
-2026-08-15 #896 review 修复补充：确认卡/编辑表单打开时在服务端暂存当前 thread 的 Goal fingerprint（createdAt/objective/budget），执行 `clear --confirm` / `new|edit` 前先与最新 thread Goal 比对，漂移则取消操作并出错误卡，避免外部 mutation 窗口内的误清/误改；goal 命令 dispatch 失败会清理 pending `goalUserCommands` 并回错误卡，不再静默丢弃；卡片入口触发的 loading 与结果卡通过 `MessageID + Patchable` 在同一 message 上 patch，不残留无按钮死卡；错误卡复用 config 命令 builder（非 sealed），失败原因不伪装成 no-goal 状态。
+2026-08-15 #896 review 修复补充：确认卡/编辑表单打开时在服务端暂存当前 thread 的 Goal fingerprint（createdAt/objective/budget），执行 `clear --confirm` / `new|edit` 前先与最新 thread Goal 比对，漂移则取消操作并出错误卡，避免外部 mutation 窗口内的误清/误改；goal 命令 dispatch 失败会清理 pending `goalUserCommands` 并回错误卡，不再静默丢弃；卡片入口触发的 loading 与结果卡通过 `MessageID + Patchable` 在同一 message 上 patch；Goal 按钮与 new/edit 表单复用 `thread_id` / `instance_id` 绑定原目标，缺失或目标变化时拒绝并提示重新发送 `/goal`，仅无目标的 bare `/goal` 菜单入口可查询当前会话。异步结果不向后来选中的另一 thread / instance 展示可操作卡片。查询确认 `GoalMissing` 时清理旧缓存；清除仅在收到 `GoalCleared` 时显示成功。错误卡复用 config 命令 builder（非 sealed），失败原因不伪装成 no-goal 状态。
 
 ## 11. 待讨论取舍
 

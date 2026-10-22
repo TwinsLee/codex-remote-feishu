@@ -7,6 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/core/threadtitle"
 )
 
 type targetPickerWorkspaceEntryMode int
@@ -162,24 +163,22 @@ func (s *Service) targetPickerSessionOptions(surface *state.SurfaceConsoleRecord
 			target := s.resolveThreadTargetFromView(surface, view)
 			if target.Mode == threadAttachUnavailable {
 				if !s.mergedThreadViewHasCompatibleVisibleInstance(surface, view) {
-					entry := s.threadSelectionViewEntry(surface, view, true)
-					meta := targetPickerSessionMetaText(source, s.threadSelectionMetaText(surface, view, entry.Status))
 					options = append(options, control.FeishuTargetPickerSessionOption{
-						Value:    targetPickerThreadValue(view.ThreadID),
-						Kind:     control.FeishuTargetPickerSessionThread,
-						Label:    entry.Summary,
-						MetaText: meta,
+						Value:      targetPickerThreadValue(view.ThreadID),
+						Kind:       control.FeishuTargetPickerSessionThread,
+						Label:      threadtitle.DisplayBody(view.Thread, 0),
+						MetaText:   threadCWD(view),
+						LastUsedAt: threadLastUsedAt(view),
 					})
 				}
 				continue
 			}
-			entry := s.threadSelectionViewEntry(surface, view, true)
-			meta := targetPickerSessionMetaText(source, s.threadSelectionMetaText(surface, view, entry.Status))
 			options = append(options, control.FeishuTargetPickerSessionOption{
-				Value:    targetPickerThreadValue(view.ThreadID),
-				Kind:     control.FeishuTargetPickerSessionThread,
-				Label:    entry.Summary,
-				MetaText: meta,
+				Value:      targetPickerThreadValue(view.ThreadID),
+				Kind:       control.FeishuTargetPickerSessionThread,
+				Label:      threadtitle.DisplayBody(view.Thread, 0),
+				MetaText:   threadCWD(view),
+				LastUsedAt: threadLastUsedAt(view),
 			})
 		}
 	}

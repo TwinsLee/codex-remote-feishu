@@ -1025,7 +1025,7 @@ func TestShowThreadsDetachedPrefersPersistedFreshMetadataForVisibleThread(t *tes
 	}
 	view := targetPickerFromEvent(t, events[0])
 	option, ok := targetPickerSessionOption(view, targetPickerThreadValue("thread-1"))
-	if !ok || option.Label != "droid · 数据库里的新标题" || option.MetaText != "" {
+	if !ok || option.Label != "数据库里的新标题" || option.MetaText != "/data/dl/droid" || !option.LastUsedAt.Equal(now.Add(3*time.Minute)) {
 		t.Fatalf("expected persisted freshness to improve visible thread metadata without changing attach mode, got %#v", option)
 	}
 }

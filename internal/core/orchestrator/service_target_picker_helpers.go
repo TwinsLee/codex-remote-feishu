@@ -59,13 +59,6 @@ func parseTargetPickerSessionValue(value string) (control.FeishuTargetPickerSess
 	}
 }
 
-func targetPickerSessionMetaText(source control.TargetPickerRequestSource, value string) string {
-	if targetPickerRequiresExistingWorkspace(source) {
-		return ""
-	}
-	return strings.TrimSpace(value)
-}
-
 func targetPickerWorkspaceEntryByKey(entries []workspaceSelectionEntry, workspaceKey string) (workspaceSelectionEntry, bool) {
 	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
 	if workspaceKey == "" {

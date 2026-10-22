@@ -99,7 +99,7 @@ func TestThreadTitleUsesUnnamedPlaceholderWhenOnlyPreviewExists(t *testing.T) {
 	}
 }
 
-func TestPresentThreadSelectionIncludesStableShortIDInSubtitle(t *testing.T) {
+func TestPresentThreadSelectionKeepsUnnamedTitleSeparateFromDirectory(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -127,7 +127,7 @@ func TestPresentThreadSelectionIncludesStableShortIDInSubtitle(t *testing.T) {
 		t.Fatalf("expected one thread option plus new-thread fallback, got %#v", view.SessionOptions)
 	}
 	option, ok := targetPickerSessionOption(view, targetPickerThreadValue("019d56f0-de5e-7943-bc9a-18c42ef11acb"))
-	if !ok || option.Label != "dl · 未命名会话" || strings.Contains(option.Label, "…") {
+	if !ok || option.Label != "未命名会话" || option.MetaText != "/data/dl" || strings.Contains(option.Label, "…") {
 		t.Fatalf("expected unnamed duplicate session to avoid short id leakage, got %#v", option)
 	}
 	if option, ok := targetPickerSessionOption(view, targetPickerNewThreadValue); !ok || option.Kind != control.FeishuTargetPickerSessionNewThread {

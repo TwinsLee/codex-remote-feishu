@@ -4,7 +4,21 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
+
+const (
+	targetPickerStatusSessionNameLimit  = 80
+	targetPickerSummarySessionNameLimit = 1000
+)
+
+func targetPickerDisplaySessionName(name string, limit int) string {
+	name = strings.TrimSpace(name)
+	if len([]rune(name)) <= limit {
+		return name
+	}
+	return xutil.TruncateRunes(name, limit, xutil.TruncateOptions{ReserveEllipsis: true}) + "（名称过长，已截断）"
+}
 
 func targetPickerDefaultPage(source control.TargetPickerRequestSource) control.FeishuTargetPickerPage {
 	switch source {
@@ -89,7 +103,7 @@ func targetPickerSwitchProcessingStatus(workspaceLabel, sessionLabel string) fei
 		lines = append(lines, "工作区："+workspaceLabel)
 	}
 	if sessionLabel = strings.TrimSpace(sessionLabel); sessionLabel != "" {
-		lines = append(lines, "会话："+sessionLabel)
+		lines = append(lines, "会话："+targetPickerDisplaySessionName(sessionLabel, targetPickerStatusSessionNameLimit))
 	}
 	sections := []control.FeishuCardTextSection{}
 	if len(lines) != 0 {

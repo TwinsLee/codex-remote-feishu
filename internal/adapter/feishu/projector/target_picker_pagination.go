@@ -80,17 +80,17 @@ func targetPickerTargetPageElements(view control.FeishuTargetPickerView, daemonL
 		)
 		return targetPickerCombinePageElements(
 			pagePrefix,
-			targetPickerWorkspaceLane(view).renderElements(daemonLifecycleID, workspacePlan.Page),
-			targetPickerSessionLane(view).renderElements(daemonLifecycleID, sessionPlan.Page),
+			targetPickerRenderLaneElements(view, targetPickerWorkspaceLane(view), daemonLifecycleID, workspacePlan.Page),
+			targetPickerRenderLaneElements(view, targetPickerSessionLane(view), daemonLifecycleID, sessionPlan.Page),
 		)
 	case renderWorkspaceSelect:
 		lane := targetPickerWorkspaceLane(view)
 		plan := targetPickerPlanSingleLane(view, daemonLifecycleID, pagePrefix, lane)
-		return targetPickerCombinePageElements(pagePrefix, lane.renderElements(daemonLifecycleID, plan.Page))
+		return targetPickerCombinePageElements(pagePrefix, targetPickerRenderLaneElements(view, lane, daemonLifecycleID, plan.Page))
 	case renderSessionSelect:
 		lane := targetPickerSessionLane(view)
 		plan := targetPickerPlanSingleLane(view, daemonLifecycleID, pagePrefix, lane)
-		return targetPickerCombinePageElements(pagePrefix, lane.renderElements(daemonLifecycleID, plan.Page))
+		return targetPickerCombinePageElements(pagePrefix, targetPickerRenderLaneElements(view, lane, daemonLifecycleID, plan.Page))
 	default:
 		return pagePrefix
 	}
@@ -130,7 +130,7 @@ func targetPickerWorkspaceLaneWithLabel(view control.FeishuTargetPickerView, lab
 func targetPickerSessionLane(view control.FeishuTargetPickerView) paginatedSelectFlowLane {
 	return paginatedSelectFlowLane{
 		Flow:          selectflow.TargetPickerSessionFlow,
-		Label:         "会话",
+		Label:         "会话（最近活动时间）",
 		Placeholder:   xutil.FirstNonEmpty(strings.TrimSpace(view.SessionPlaceholder), "选择会话"),
 		Cursor:        view.SessionCursor,
 		SelectedValue: strings.TrimSpace(view.SelectedSessionValue),
@@ -155,7 +155,7 @@ func targetPickerPlanSingleLane(
 			return targetPickerEditingCardSize(
 				view,
 				daemonLifecycleID,
-				targetPickerCombinePageElements(pagePrefix, lane.renderElements(daemonLifecycleID, page)),
+				targetPickerCombinePageElements(pagePrefix, targetPickerRenderLaneElements(view, lane, daemonLifecycleID, page)),
 			)
 		},
 	)
@@ -200,8 +200,8 @@ func targetPickerPlanDualLanes(
 				daemonLifecycleID,
 				targetPickerCombinePageElements(
 					pagePrefix,
-					leftLane.renderElements(daemonLifecycleID, leftPage),
-					rightLane.renderElements(daemonLifecycleID, rightPage),
+					targetPickerRenderLaneElements(view, leftLane, daemonLifecycleID, leftPage),
+					targetPickerRenderLaneElements(view, rightLane, daemonLifecycleID, rightPage),
 				),
 			)
 		},
@@ -224,7 +224,7 @@ func targetPickerLaneFit(
 			size, err := targetPickerEditingCardSize(
 				view,
 				daemonLifecycleID,
-				targetPickerCombinePageElements(pagePrefix, lane.renderElements(daemonLifecycleID, page)),
+				targetPickerCombinePageElements(pagePrefix, targetPickerRenderLaneElements(view, lane, daemonLifecycleID, page)),
 			)
 			if err != nil {
 				return 0, err

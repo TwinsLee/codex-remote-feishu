@@ -94,6 +94,9 @@ func targetPickerLockedWorkspaceSections(view control.FeishuTargetPickerView) []
 	if label := strings.TrimSpace(view.SelectedWorkspaceLabel); label != "" {
 		lines = append(lines, label)
 	}
+	if path := strings.TrimSpace(view.SelectedWorkspaceKey); path != "" {
+		lines = append(lines, "完整路径："+path)
+	}
 	if meta := strings.TrimSpace(view.SelectedWorkspaceMeta); meta != "" {
 		lines = append(lines, meta)
 	}
@@ -206,13 +209,13 @@ func targetPickerGitURLElements(view control.FeishuTargetPickerView, daemonLifec
 func targetPickerWorktreeElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
 	lane := targetPickerWorktreeWorkspaceLane(view)
 	plan := targetPickerPlanSingleLaneForm(view, daemonLifecycleID, lane, func(page paginatedSelectPage) []map[string]any {
-		form := targetPickerWorktreeFormElement(view, daemonLifecycleID, lane.renderElements(daemonLifecycleID, page))
+		form := targetPickerWorktreeFormElement(view, daemonLifecycleID, targetPickerRenderLaneElements(view, lane, daemonLifecycleID, page))
 		if len(form) == 0 {
 			return nil
 		}
 		return []map[string]any{form}
 	})
-	form := targetPickerWorktreeFormElement(view, daemonLifecycleID, lane.renderElements(daemonLifecycleID, plan.Page))
+	form := targetPickerWorktreeFormElement(view, daemonLifecycleID, targetPickerRenderLaneElements(view, lane, daemonLifecycleID, plan.Page))
 	if len(form) == 0 {
 		return nil
 	}
@@ -453,7 +456,7 @@ func targetPickerWorkspaceOptions(options []control.FeishuTargetPickerWorkspaceO
 			continue
 		}
 		result = append(result, map[string]any{
-			"text":  cardkit.PlainText(targetPickerOptionLabel(option.Label, option.MetaText)),
+			"text":  cardkit.PlainText(strings.TrimSpace(option.Label)),
 			"value": value,
 		})
 	}
@@ -468,24 +471,9 @@ func targetPickerSessionOptions(options []control.FeishuTargetPickerSessionOptio
 			continue
 		}
 		result = append(result, map[string]any{
-			"text":  cardkit.PlainText(targetPickerOptionLabel(option.Label, option.MetaText)),
+			"text":  cardkit.PlainText(targetPickerSessionOptionLabel(option)),
 			"value": value,
 		})
 	}
 	return result
-}
-
-func targetPickerOptionLabel(label, meta string) string {
-	label = strings.TrimSpace(label)
-	meta = strings.TrimSpace(meta)
-	if label == "" {
-		return meta
-	}
-	if meta == "" {
-		return label
-	}
-	if line := strings.TrimSpace(strings.Split(meta, "\n")[0]); line != "" {
-		return label + " · " + line
-	}
-	return label
 }

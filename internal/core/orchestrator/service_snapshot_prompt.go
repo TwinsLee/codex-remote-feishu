@@ -220,9 +220,13 @@ func (s *Service) resolvePromptConfig(inst *state.InstanceRecord, surface *state
 		}
 	}
 	effectiveModel := baseModel
+	// New native threads inherit Codex's own model configuration when no model is known.
+	nativeNewThread := backend == agentproto.BackendCodex && surface != nil &&
+		s.surfaceIsHeadless(surface) && threadID == "" &&
+		s.surfaceCodexProfileID(surface) == state.NativeCodexProfileID
 	if override.Model != "" {
 		effectiveModel = configValue{Value: override.Model, Source: "surface_override"}
-	} else if effectiveModel.Value == "" {
+	} else if effectiveModel.Value == "" && !nativeNewThread {
 		if defaultValue := defaultPromptModelForBackend(backend); defaultValue != "" {
 			effectiveModel = configValue{Value: defaultValue, Source: "surface_default"}
 		}

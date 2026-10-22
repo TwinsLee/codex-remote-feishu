@@ -247,6 +247,9 @@ type Command struct {
 	MCP         MCPCommand         `json:"mcp,omitempty"`
 	Review      ReviewRequest      `json:"review,omitempty"`
 	Goal        GoalCommand        `json:"goal,omitempty"`
+
+	// Opt-in for desktop handoff; ordinary process.exit is unchanged.
+	RequireChildExitConfirmation bool `json:"requireChildExitConfirmation,omitempty"`
 }
 
 type GoalCommand struct {

@@ -84,10 +84,22 @@ func (s *Server) Close() error {
 }
 
 func (s *Server) SendCommand(instanceID string, command agentproto.Command) error {
+	return s.sendCommandOnConnection(instanceID, 0, command)
+}
+
+// SendCommandOnConnection never retargets an exit command to a replacement socket.
+func (s *Server) SendCommandOnConnection(instanceID string, connectionID uint64, command agentproto.Command) error {
+	if connectionID == 0 {
+		return errors.New("missing relay connection identity")
+	}
+	return s.sendCommandOnConnection(instanceID, connectionID, command)
+}
+
+func (s *Server) sendCommandOnConnection(instanceID string, connectionID uint64, command agentproto.Command) error {
 	s.mu.RLock()
 	current := s.conns[instanceID]
 	s.mu.RUnlock()
-	if current == nil {
+	if current == nil || connectionID != 0 && current.id != connectionID {
 		return errors.New("instance offline")
 	}
 	payload, err := agentproto.MarshalEnvelope(agentproto.Envelope{

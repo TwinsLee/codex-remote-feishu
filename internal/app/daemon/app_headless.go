@@ -34,6 +34,8 @@ func (a *App) handleDaemonCommand(command control.DaemonCommand) []eventcontract
 
 func (a *App) handleDaemonCommandLocked(command control.DaemonCommand) []eventcontract.Event {
 	switch command.Kind {
+	case control.DaemonCommandDesktopHandoff:
+		return a.handoffToDesktopLocked(command)
 	case control.DaemonCommandStartHeadless:
 		return a.startManagedHeadlessLocked(command)
 	case control.DaemonCommandKillHeadless:

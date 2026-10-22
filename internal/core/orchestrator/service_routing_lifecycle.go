@@ -48,6 +48,9 @@ func (s *Service) finishSurfaceAfterWork(surface *state.SurfaceConsoleRecord) []
 	if surface == nil {
 		return nil
 	}
+	if s.desktopHandoffs[surface.SurfaceSessionID] != "" {
+		return nil
+	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if surface.Abandoning && !s.surfaceNeedsDelayedDetach(surface, inst) {
 		events := s.finalizeDetachedSurface(surface)

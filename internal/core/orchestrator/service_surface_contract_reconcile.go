@@ -57,7 +57,7 @@ func (s *Service) reconcileHeadlessSurfaceContractWithOptions(surface *state.Sur
 		surface.ContractRefreshPending = false
 		return nil
 	}
-	if surface.PendingHeadless != nil || s.surfaceHasLiveRemoteWork(surface) || s.surfaceNeedsDelayedDetach(surface, inst) {
+	if s.DesktopHandoffPending(surface.SurfaceSessionID, inst.InstanceID) || surface.PendingHeadless != nil || s.surfaceHasLiveRemoteWork(surface) || s.surfaceNeedsDelayedDetach(surface, inst) {
 		surface.ContractRefreshPending = true
 		return nil
 	}

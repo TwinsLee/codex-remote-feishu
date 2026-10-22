@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-10-20`
-> Summary: 校正持久会话的工作区归属与可见实例，并在列表和状态投影同步桌面显式名称；名称刷新不改变路由。
+> Updated: `2026-10-22`
+> Summary: 增加空闲 Codex 的 /desk 桌面交接，区分连接断开与进程退出；保留此前的会话归属与桌面名称同步修正。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -418,7 +418,7 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 | `E3 Running` | `ActiveQueueItemID` 指向 `running` | turn 已进入执行 |
 | `E4 PausedForLocal` | `DispatchMode=paused_for_local` | 当前 surface 的远端派发被暂停；现有来源包括本地 VS Code 活动，以及 daemon 显式发起的 standalone Codex 升级或 current-thread patch 事务暂停 |
 | `E5 HandoffWait` | `DispatchMode=handoff_wait` | 本地刚结束，等待短窗口后恢复远端队列 |
-| `E6 Abandoning` | `Abandoning=true` | surface 已放弃接管，等待已有 turn 收尾后最终 detach |
+| `E6 Abandoning` | `Abandoning=true` | 等待已有 turn 收尾，或等待 /desk 确认执行实例退出，再最终 detach |
 
 补充说明：
 
@@ -434,7 +434,7 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 5. `/detach` 在 `E2 Dispatching` 下当前分两类处理：
    1. 若仍是 pre-start dispatch（`pendingRemote` 还没有 `TurnID`、没有 output、active item 仍是 `dispatching`），会立即把 active item 标成 failed、清掉 pending remote ownership，并直接 detach。
    2. 只有已经存在真实 started remote turn、或 compact/steer 等仍需等待的 live work 时，才会进入 `E6 Abandoning`。
-6. `E6 Abandoning` 现在只覆盖“确实还有 live work 在收尾”的场景，不再把 pre-start dispatching 残留也一并塞进 watchdog-only 等待路径。
+6. 普通 `/detach` 的 `E6 Abandoning` 只覆盖“确实还有 live work 在收尾”的场景，不把 pre-start dispatching 残留塞进 watchdog-only 等待路径；`/desk` 另用此 gate 等待进程退出，见 5.5.1。
 7. `E6 Abandoning` 是 detach 的取消门，不是可恢复的 detached 状态：headless/VS Code 的自动恢复入口必须跳过 `Abandoning=true` 的 surface；detach-like action 的 durable resume target 清理必须先于任何可能释放 app mutex 的事件派发。
 8. Feishu room active reservations 不是新的 surface 执行态，而是 room context coordination overlay；当前 surface 自己的 `E2/E3` 不会被自己的 reservation 重复阻挡，但同 room 其它 surface 的普通 queued dispatch、AutoContinue scheduled dispatch、AutoWhip scheduled dispatch、review start/apply 和 headless replay 会在真正创建新 turn 前检查预算，并收到 `room_workspace_active` notice；其中自动 tick 路径会复用 active notice cooldown，避免每轮 tick 都追加同一条提示。
 9. reservation 的释放收口到各自 owner 的终止路径：queue item 的 turn completed/failed、pre-start detach abort、system/recovery fail、finalizeDetachedSurface 释放 queue-owned reservation；review session、pending headless/replay、Claude restart failure/timeout/disconnect 分别释放自己的 reservation；destructive room workspace reset 会额外清掉 room-level reservations。transport degraded 若仍保留真实 queue/remote ownership，保留对应 queue reservation，不提前放行同 room 新 turn。
@@ -1719,6 +1719,19 @@ detach 时额外保证：
 1. 未发送 queue item 会被丢弃。
 2. staged image / staged file 会被丢弃。
 3. request prompt / request capture 会被清空。
+
+### 5.5.1 `/desk`：交给桌面继续
+
+`/desk` 与 `/detach` 分开：`/detach` 只断开接管；`/desk` 请求当前 Remote 托管的 Codex wrapper 正常退出，确认进程退出后再提示桌面继续。聊天记录和代码保留。
+
+1. 仅 headless、在线、Remote managed 的 Codex 实例且 PID 已知时可用。执行、排队、待确认、启动中或运行中的审阅、活动 Goal、暂存附件或其他 surface 共用该实例时拒绝；不打断工作。
+2. 开始后保留原实例/线程 claim，进入 `Abandoning` 并记录 `desktopHandoffs[surfaceID]=instanceID`。这期间只允许 `/status`，其他动作返回 `desk_pending`，不能开启自动继续或切换目标。
+3. 发送退出请求前先持久清空当前 surface 的 resume target；保存失败则取消交接。交接期间的 persistence tick 同样不写回目标，自动恢复跳过该 surface，避免抢回桌面会话。
+4. daemon 向原实例的原 relay 连接发送 `process.exit`，同时设置可选的 `requireChildExitConfirmation=true`。连接已被替换就失败，不向替代进程发送。wrapper 使用现有清理流程，再观察原生子进程确已退出，以关联同一 `CommandID` 的 `process.exit.ready` 事件返回 `succeeded` / `failed`；普通 `process.exit` 不启用此分支。旧 wrapper 不返回确认时，交接超时失败，不冒充成功。
+5. 发送与退出等待不持有 app mutex，其他 Bot 继续工作。发送使用现有 relay 超时，发送成功后在共用的 15 秒时限内等到子进程成功确认及原 wrapper PID 退出；任一缺失都失败，不追加 daemon 强杀。等待期间断线和 transport degraded 均保留交接 gate、instance/thread claim；跨 surface 的 Profile 收敛延后，不得 kill/restart 交接对象。
+6. 连接断开不算退出。此分支不使用普通 detach 的强制解除 watchdog，迟到的 turn 收尾也不提前 detach；由有界进程观察完成或回退。
+7. 确认原进程退出且实例身份仍匹配后，最终 detach、移除该 managed instance，并提示 `desk_released`；清掉恢复目标，Remote 重启后也不自动抢回。用户之后可 `/use` 或 `/list` 恢复原会话。
+8. 请求失败或退出未确认时提示 `desk_failed`，解除交接 gate 与原 managed 记录的 `stopping` 状态；仍在线则保留原会话并恢复 resume target，已离线则断开并由用户 `/use` 重选。不把超时或断线说成桌面已解锁，也不停止 Remote 主服务、其他 Bot 或外部实例。
 
 ### 5.6 transport degraded / reconnect / hard disconnect
 

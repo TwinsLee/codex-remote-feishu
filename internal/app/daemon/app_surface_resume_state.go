@@ -229,6 +229,7 @@ func (a *App) currentSurfaceResumeEntryLocked(surface *state.SurfaceConsoleRecor
 	if surface == nil {
 		return surfaceresume.Entry{}, false
 	}
+	clearResumeTarget = clearResumeTarget || a.service.DesktopHandoffPending(surface.SurfaceSessionID, surface.AttachedInstanceID)
 	entry := surfaceresume.Entry{
 		SurfaceSessionID:     strings.TrimSpace(surface.SurfaceSessionID),
 		GatewayID:            strings.TrimSpace(surface.GatewayID),

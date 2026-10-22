@@ -32,7 +32,8 @@ const (
 )
 
 type shutdownRequest struct {
-	CommandID string
+	CommandID                    string
+	RequireChildExitConfirmation bool
 }
 
 type restartRequest struct {
@@ -278,7 +279,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 			if command.Kind == agentproto.CommandProcessExit {
 				a.debugf("relay shutdown command received: command=%s", command.CommandID)
 				select {
-				case shutdownCh <- shutdownRequest{CommandID: command.CommandID}:
+				case shutdownCh <- shutdownRequest{CommandID: command.CommandID, RequireChildExitConfirmation: command.RequireChildExitConfirmation}:
 				default:
 				}
 				return nil
@@ -485,6 +486,11 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 		case request := <-shutdownCh:
 			a.debugf("wrapper shutdown requested by daemon: command=%s", request.CommandID)
 			stopChildSession(activeChild, a.debugf)
+			if request.RequireChildExitConfirmation {
+				if err := client.SendEvents([]agentproto.Event{confirmedChildExitEvent(request.CommandID, activeChild)}); err != nil {
+					a.debugf("child exit confirmation send failed: %v", err)
+				}
+			}
 			drainAndCloseRelayClient(client, problems.Emit)
 			return 0, nil
 		case request := <-restartCh:

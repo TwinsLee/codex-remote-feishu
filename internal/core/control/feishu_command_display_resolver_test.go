@@ -27,7 +27,7 @@ func TestResolveFeishuCommandDisplayFamilyCarriesContextualVariantIdentity(t *te
 func TestResolveFeishuCommandDisplayGroupDefaultsToCodexNormalHelpProjection(t *testing.T) {
 	resolved := ResolveFeishuCommandDisplayGroup(FeishuCommandGroupSwitchTarget, false, CatalogContext{})
 	got := resolvedDisplayCommands(resolved)
-	want := []string{"/workspace", "/workspace list", "/workspace new", "/workspace new dir", "/workspace new git", "/workspace new worktree", "/workspace detach"}
+	want := []string{"/workspace", "/workspace list", "/workspace new", "/workspace new dir", "/workspace new git", "/workspace new worktree", "/workspace detach", "/desk"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("default help switch_target commands = %#v, want %#v", got, want)
 	}
@@ -152,6 +152,7 @@ func TestResolveFeishuCommandDisplayProfileTracksModeSpecificFamilies(t *testing
 		FeishuCommandWorkspaceNewGit,
 		FeishuCommandWorkspaceNewWorktree,
 		FeishuCommandWorkspaceDetach,
+		FeishuCommandDesk,
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("codex visible switch_target families = %#v, want %#v", got, want)
 	}

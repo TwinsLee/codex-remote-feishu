@@ -694,6 +694,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			{alias: "detach", action: Action{Kind: ActionDetach}},
 		},
 	},
+	deskCommandSpec(),
 	{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandFollow,

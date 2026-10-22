@@ -141,6 +141,8 @@ type App struct {
 	runCodexNativeConfigProbe     func(context.Context, codexprofile.NativeConfigProbeOptions) (codexprofile.NativeConfigObservation, error)
 	stopProcess                   func(int, time.Duration) error
 	sendAgentCommand              func(string, agentproto.Command) error
+	sendAgentCommandOnConnection  func(string, uint64, agentproto.Command) error
+	desktopExitWaiters            map[string]*desktopExitWaiter
 	ingress                       *ingressPump
 	ingressCancel                 context.CancelFunc
 	ingressStarted                bool
@@ -274,6 +276,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		OnDisconnect: app.enqueueDisconnect,
 	})
 	app.sendAgentCommand = app.relay.SendCommand
+	app.sendAgentCommandOnConnection = app.relay.SendCommandOnConnection
 	app.relay.SetServerIdentity(serverIdentity)
 
 	relayMux := http.NewServeMux()

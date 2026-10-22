@@ -198,6 +198,7 @@ func buildFeishuCommandBindings() map[string]FeishuCommandBinding {
 	bindings[FeishuCommandStop] = ownerEntryBindingWithPolicy(FeishuCommandStop)
 	bindings[FeishuCommandWorkspaceDetach] = ownerEntryBindingWithPolicy(FeishuCommandWorkspaceDetach)
 	bindings[FeishuCommandDetach] = ownerEntryBindingWithPolicy(FeishuCommandDetach)
+	bindings[FeishuCommandDesk] = ownerEntryBindingWithPolicy(FeishuCommandDesk)
 
 	bindings[FeishuCommandDebug] = daemonCommandBinding(FeishuCommandDebug, DaemonCommandDebug, false)
 	bindings[FeishuCommandAdminSubcommand] = daemonCommandBinding(FeishuCommandAdminSubcommand, DaemonCommandAdmin, false)

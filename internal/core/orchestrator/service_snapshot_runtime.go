@@ -715,6 +715,9 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []eventcontract.E
 	}
 
 	for _, surface := range surfaces {
+		if s.DesktopHandoffPending(surface.SurfaceSessionID, instanceID) {
+			continue
+		}
 		s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 		clearSurfacePromptRuntimeOverride(surface)
 		s.resetSurfaceExecutionGates(surface)
@@ -741,7 +744,9 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []eventcontract.E
 			},
 		})
 	}
-	s.clearInstanceClaim(instanceID)
+	if !s.instanceHasDesktopHandoff(instanceID) {
+		s.clearInstanceClaim(instanceID)
+	}
 	s.clearInstanceRemoteTurnOwnership(instanceID)
 	return events
 }
@@ -768,6 +773,9 @@ func (s *Service) ApplyInstanceTransportDegraded(instanceID string, emitNotice b
 	noticeText := s.attachmentTransportDegradedText(nil, inst)
 	preserveRemoteOwnership := false
 	for _, surface := range surfaces {
+		if s.DesktopHandoffPending(surface.SurfaceSessionID, instanceID) {
+			continue
+		}
 		noticeText = s.attachmentTransportDegradedText(surface, inst)
 		s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 		clearSurfacePromptRuntimeOverride(surface)

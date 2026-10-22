@@ -157,6 +157,7 @@ daemon 不会在后台自动弹升级提示；升级只通过这条手动入口�
 - `/status`：查看当前状态、队列和模型配置
 - `/stop`：中断当前任务并清空队列
 - `/detach`：断开当前接管
+- `/desk`：空闲时释放当前 Codex 执行实例，交给 ChatGPT 桌面端继续
 - `/sendfile`：把当前工作区里的文件发回飞书
 - `/cron`：配置当前 daemon 的定时任务
 - `/mode claude`：切换到 Claude Code 后端

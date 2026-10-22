@@ -55,6 +55,7 @@ type Service struct {
 	handoffUntil              map[string]time.Time
 	pausedUntil               map[string]time.Time
 	abandoningUntil           map[string]time.Time
+	desktopHandoffs           map[string]string
 	itemBuffers               map[string]*itemBuffer
 	threadRefreshes           map[string]bool
 	instanceClaims            map[string]*instanceClaimRecord
@@ -311,6 +312,9 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		return s.filterEventsForSurfaceVisibility(blocked)
 	}
 	s.pruneExpiredPathPicker(surface)
+	if s.desktopHandoffs[surface.SurfaceSessionID] != "" && action.Kind != control.ActionStatus {
+		return s.filterEventsForSurfaceVisibility(notice(surface, "desk_pending", "正在等待当前执行实例退出，请稍后；可用 /status 查看状态。"))
+	}
 	if surface.Abandoning {
 		switch action.Kind {
 		case control.ActionStatus:
@@ -517,6 +521,8 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		events = []eventcontract.Event{{Kind: eventcontract.KindSnapshot, SurfaceSessionID: surface.SurfaceSessionID, Snapshot: s.buildSnapshot(surface)}}
 	case control.ActionDetach:
 		events = s.detach(surface)
+	case control.ActionDesk:
+		events = s.beginDesktopHandoff(surface, action)
 	default:
 		return nil
 	}

@@ -673,6 +673,9 @@ func (a *App) onEvents(ctx context.Context, instanceID string, events []agentpro
 	syncSurfaceResumeState := false
 	syncBotCapabilitySettingsState := false
 	for _, event := range events {
+		if a.noteDesktopExitConfirmationLocked(instanceID, event) {
+			continue
+		}
 		now := time.Now().UTC()
 		if historyEvents, handled := a.handleThreadHistoryEventLocked(instanceID, event); handled {
 			a.handleUIEventsLocked(ctx, historyEvents)

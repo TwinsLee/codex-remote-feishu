@@ -44,6 +44,7 @@ type FeishuCommandSupport struct {
 var feishuCommandDisplayProfiles = map[string]FeishuCommandDisplayProfile{
 	"codex": newFeishuCommandDisplayProfile("codex", true,
 		commandSupportVisible(FeishuCommandStop),
+		commandSupportVisible(FeishuCommandDesk),
 		commandSupportVisible(FeishuCommandCompact),
 		commandSupportVisible(FeishuCommandSteerAll),
 		commandSupportVisibleWithStages(FeishuCommandNew, FeishuCommandMenuStageNormalWorking),

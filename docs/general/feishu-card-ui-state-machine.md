@@ -1,10 +1,12 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-08-15`
-> Summary: detached 私聊配置卡按 bot setting 所有权开放，并对 OpenCode reasoning 保留 ACP capability 门禁。
+> Updated: `2026-10-22`
+> Summary: 增加 /desk 的命令帮助与交接回显约定；保留既有配置卡所有权和 backend capability 门禁。
 
 ## 1. 文档定位
+
+`/desk` 增量：Codex 帮助目录展示“交给桌面”，不新增菜单项、callback payload 或卡片 owner。命令复用现有 slash/catalog 入口和 owner-entry binding；忙时拒绝，交接中只允许 `/status`，确认进程退出后才追加 `desk_released` 回显，失败追加 `desk_failed`。原 `/detach` 不变；核心转换见 [Remote 状态机 5.5.1](remote-surface-state-machine.md#551-desk交给桌面继续)。
 
 这份文档描述的是 **当前代码已经实现** 的 Feishu 卡片 UI / callback 层行为。
 

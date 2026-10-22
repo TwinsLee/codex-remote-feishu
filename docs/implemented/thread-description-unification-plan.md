@@ -1,8 +1,8 @@
 # 会话描述统一方案
 
 > Type: `implemented`
-> Updated: `2026-04-26`
-> Summary: 已落地 canonical thread DisplayName contract，并进一步把展示 / 存储 / 恢复的 thread title 语义收口到单一 `threadtitle` owner。
+> Updated: `2026-10-20`
+> Summary: 统一 DisplayName，并在列表与状态投影中读取 Codex 桌面显式名称，保留旧数据库兼容和失败缓存边界。
 
 ## 背景
 
@@ -107,6 +107,13 @@
 - admin runtime surface
 
 ## Legacy 兼容
+
+### 0. Codex 桌面改名同步
+
+- Codex SQLite catalog 每次读取探测可选 `name` 列；非空显式名优先，旧 schema、NULL／空白名称继续使用旧 `title` 回退。只读查询，不迁移或修改 Codex 数据库；原始用户消息不被名称替换。
+- 成功读取的显式名独立于 `updated_at`／运行态 `LastUsedAt`：桌面仅改名、会话仍活跃时，下次列表或状态读取也能更新。`PersistedName` 仅为本次读取的内部投影标记，不序列化到 daemon 状态。
+- recent 查询失败时复用的缓存会清除此标记，不把旧缓存当作新的改名事实。名称按当前展示的 thread ID 批量只读查询，每批最多 200 个，不受全库 recent 窗口限制；读取失败时保留运行态名称。没有批量能力的旧 catalog 仍可按 ID 查询。
+- headless 合并列表、当前实例下拉及 snapshot 共用上述规则；snapshot／当前实例投影不改写运行态线程。工作区前缀、CWD、claims、route、队列、锁和活跃时间沿用原逻辑，其他 backend 不读取 Codex 名称。
 
 ### 1. 旧线程 / 持久化线程
 

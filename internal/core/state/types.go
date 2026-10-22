@@ -250,10 +250,13 @@ type InstanceRecord struct {
 }
 
 type ThreadRecord struct {
-	ThreadID                 string
-	ForkedFromID             string
-	Source                   *agentproto.ThreadSourceRecord
-	Name                     string
+	ThreadID     string
+	ForkedFromID string
+	Source       *agentproto.ThreadSourceRecord
+	Name         string
+	// PersistedName is an explicit name from a fresh catalog read, not an
+	// activity timestamp. It is projection-only and never serialized.
+	PersistedName            string `json:"-"`
 	Preview                  string
 	FirstUserMessage         string
 	LastUserMessage          string

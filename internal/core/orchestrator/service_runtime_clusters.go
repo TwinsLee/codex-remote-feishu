@@ -184,7 +184,13 @@ func (r *serviceCatalogRuntime) recentPersistedThreadsForBackend(backend agentpr
 		if len(r.persistedThreadsLast[backend]) == 0 {
 			return nil
 		}
-		return clonePersistedThreads(r.persistedThreadsLast[backend])
+		cached := clonePersistedThreads(r.persistedThreadsLast[backend])
+		for i := range cached {
+			// A failed read may retain fallback metadata, but it must not turn
+			// an old desktop name into a fresh authoritative rename.
+			cached[i].PersistedName = ""
+		}
+		return cached
 	}
 	if r.persistedThreadsLast == nil {
 		r.persistedThreadsLast = map[agentproto.Backend][]state.ThreadRecord{}

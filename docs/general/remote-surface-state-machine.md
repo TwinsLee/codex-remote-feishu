@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-08-15`
-> Summary: detached Feishu 私聊按 bot 配置所有权开放 model/reasoning/access，并保留真实 runtime capability 门禁。
+> Updated: `2026-10-20`
+> Summary: 校正持久会话的工作区归属与可见实例，并在列表和状态投影同步桌面显式名称；名称刷新不改变路由。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -670,6 +670,8 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 
 ## 4. 当前已实现的不变量
 
+Codex 名称投影：SQLite catalog 兼容读取可选 `name` 列，显式名称与活动时间分开处理；列表、当前实例下拉和 snapshot 按展示的 thread ID 批量读取鲜活名称，不受全库 recent 窗口限制，旧 schema 继续回退。读取失败的缓存不携带鲜活改名标记；名称投影不修改 CWD、workspace/instance/thread claim、route、队列或生命周期。详见[会话描述统一方案](../implemented/thread-description-unification-plan.md#0-codex-桌面改名同步)。
+
 ### 4.1 `codex` 的 `workspace` 命令族先打开工作会话页面或业务卡，confirm 后再改 route
 
 当前 `codex` 的工作会话主展示已经切到 `workspace` 命令族：bare `/workspace` / `/workspace new` 负责父页导航，`/workspace list` / `/workspace new dir` / `/workspace new git` / `/workspace new worktree` 负责四张独立业务卡；`/list` / `/use` / `/useall` 只保留 alias，并在 `codex` 下汇合到 `/workspace list`。
@@ -678,6 +680,9 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 
 1. target picker 的 workspace 候选按入口分成 attach / list / worktree-base 三种模式。
    1. 在线实例先按可见 thread 的稳定 `WorkspaceKey` 归并 workspace；`thread.CWD` 只保留为最近活跃子目录。只有当某个 instance 当前完全没有可见 thread，或 thread 侧缺失稳定 root 时，才回退到该 instance 的 `WorkspaceKey/WorkspaceRoot`。
+      - 合并较新的持久会话记录时，如果该记录只提供 `CWD`、没有显式 `WorkspaceKey`，以该目录匹配的最具体已知工作区根目录校正归属。已知根目录来自同 backend 的实例与 headless surface；有效的原根目录也参与匹配，没有可匹配的根目录才回退到 `CWD`。
+      - 原生全局 thread 列表可能被多个实例重复上报，冷启动后各副本的运行活跃时间又可能为空。副本附带的实例根目录不能覆盖上述校正；最近列表与按 ID 恢复必须使用同一归属规则。
+      - 普通子目录下没有独立已知工作区时，保留原稳定根目录；较新的原生记录或持久记录显式提供的 `WorkspaceKey` 继续保持权威。
    2. merged thread views / persisted recent threads 仍会把 recoverable-only workspace 补进候选。
    3. attach 模式仍会过滤 busy workspace，以及既不能 attach 也没有 recoverable thread 支撑的 workspace。
    4. `/workspace list` / `/list` 的 list 模式会把 busy Git workspace 保留为 Worktree base；它不会暴露旧会话或新建会话，只暴露 `worktree_create` 操作。busy 非 Git workspace 仍过滤。
@@ -723,6 +728,7 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
    2. `show_all_workspaces` / `show_recent_workspaces` / `show_workspace_threads` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` 在 headless 主链下当前都退化成“用指定 source / workspace 重新打开 target picker”的兼容导航入口。
    3. 被动恢复路径也不再回到旧 scoped selection prompt；一律刷新锁定当前工作区的 target picker，并拒绝 silent fallback。
 9. confirm 后真正 attach / switch 时，`attachWorkspace()`、`attachSurfaceToKnownThread()` 与 `startHeadlessForResolvedThread()` 在 headless 主链下仍然会先走 `workspaceClaims`，再进入现有 `instanceClaims` / `threadClaims`。
+   - 选择已有 thread 时，headless visible instance 的工作区必须与该 thread 解析后的稳定工作区一致；父目录实例即使上报了同一 thread ID，也不能冒充子工作区的可见实例。所有 visible candidate（包括 current、preferred resume、startup 与 managed restore）在持久元数据合并后按同一规则重建或校验。没有合适的 visible instance 时，继续走现有 managed reuse / restore 路径，由已知会话接管流程应用正确的 workspace/CWD；不直接使用旧副本。
 
 结果：
 

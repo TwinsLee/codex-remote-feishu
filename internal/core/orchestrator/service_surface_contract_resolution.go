@@ -197,6 +197,9 @@ func (s *Service) resolveThreadContract(surface *state.SurfaceConsoleRecord, vie
 		if inst == nil {
 			return false
 		}
+		if !visibleInstanceMatchesMergedThread(inst, view) {
+			return false
+		}
 		if directVisibleOnly && !s.surfaceInstanceCompatibleForAttach(surface, inst) {
 			return false
 		}

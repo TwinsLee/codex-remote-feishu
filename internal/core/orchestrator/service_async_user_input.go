@@ -211,6 +211,9 @@ func (s *Service) asyncUserInputDispatchBlocked(surface *state.SurfaceConsoleRec
 	if inst == nil || !inst.Online || !threadVisible(inst.Threads[record.ThreadID]) {
 		return notice(surface, "async_question_unavailable", "原会话暂不可用，请恢复连接后重试。")
 	}
+	if surface.ContractRefreshPending && !s.surfaceInstanceCompatibleForAttach(surface, inst) {
+		return notice(surface, "contract_refresh_pending", "机器人配置已变化，本卡尚未提交。请等当前任务结束后，直接在聊天中发送回答以完成配置切换，或恢复原配置后重试本卡。")
+	}
 	if blocked := s.blockFeishuRoomActiveDispatch(surface); blocked != nil {
 		return blocked
 	}

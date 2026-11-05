@@ -75,7 +75,7 @@ func TestAsyncUserInputNativeMessageCardCallbackRoundTrip(t *testing.T) {
 				Operator: &larkcallback.Operator{UserID: &userID}, Action: callback,
 				Context: &larkcallback.Context{OpenChatID: "chat-1", OpenMessageID: "om-question"},
 			}})
-			if !ok || action.Kind != control.ActionAsyncUserInput || action.Request == nil || !control.AllowsInlineCardReplacement(action) {
+			if !ok || action.Kind != control.ActionAsyncUserInput || action.Request == nil || control.AllowsInlineCardReplacement(action) || !control.ResolveFeishuFrontstageActionContract(action).RejectsUnstampedCallback {
 				t.Fatalf("question callback parse/lifecycle: %#v", action)
 			}
 			answered := svc.ApplySurfaceAction(action)

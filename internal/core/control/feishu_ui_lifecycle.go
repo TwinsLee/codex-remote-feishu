@@ -176,7 +176,6 @@ func inlineReplaceableFeishuUIIntentAction(action Action) bool {
 	}
 	switch action.Kind {
 	case ActionPlanProposalDecision,
-		ActionAsyncUserInput,
 		ActionRespondRequest,
 		ActionControlRequest:
 		if isSingleTokenSlashCommand(action.Text) {

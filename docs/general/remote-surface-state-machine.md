@@ -525,6 +525,8 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 | `G11 TurnPatchTransactionRunning` | daemon 侧存在当前 instance 的 active turn-patch transaction | 发起 surface 与同 instance 上其它 attached surface 的状态改写类输入都会被挡住；当前只保留 `/status`、`/list`、`/help`、`/menu`、`/history`、`/debug`、reaction/recall 等查看类动作，直到 patch apply / rollback 收口。事务只会在 rollout 写盘后对应的 child restart 最终 outcome 成功，或在失败/超时后自动回滚并完成恢复 restart 收口后退出 |
 | `G12 BotCapabilitySettingsInvalid` | 合法 Feishu surface 对应的 gateway record 已存在，但 record 无法规范化或 storage key 与 record gateway 不一致 | capability effective read、配置与 lifecycle mutation、普通 action、queue 和 AutoContinue dispatch 全部 fail closed，不回退 raw surface；只保留 `/stop`、`/detach` 与 `/workspace detach` 释放执行和 route 资源。详细节流与恢复规则见 6.2 覆盖门禁 |
 
+原生 `agent_message.delivery=async` 的 `questions(title/options)` 使用独立内存草稿和问题卡，不进入 `PendingRequests`、不占用 active owner flow，也不捕获普通聊天或 staged 附件。多题逐题作答后，一次性将问题与答案加入原 thread 的现有队列；仅在派发正常、原 thread 正在执行且没有 pending steer 时，将本次答案单独 steer。暂停派发时保留排队；同步确认或 feedback capture 未处理时拒绝最终提交并保留草稿；steer 与 turn 结束相撞时沿现有恢复队列处理。turn 结束不清此草稿，换 instance/thread、旧 revision、非原发起者、重复提交和重启后旧卡均不能投递。跨模型组设置不兼容时提示恢复设置，不自动创建 thread。`/new` 首轮可凭精确 Remote binding 复用已有输出绑定路径显示问题卡；无效结构沿用文本回退。
+
 补充说明：
 
 1. `ActivePathPicker` 当前是一个 coarse-grained modal overlay：

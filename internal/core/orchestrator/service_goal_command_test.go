@@ -295,8 +295,8 @@ func TestGoalCommandClearFingerprintDriftFailsClosed(t *testing.T) {
 	if !strings.Contains(page.StatusText, "已取消操作") {
 		t.Fatalf("expected stale guidance in page, got %#v", page)
 	}
-	if len(svc.pendingGoalFingerprints) != 0 {
-		t.Fatalf("expected stale fingerprint to be consumed, got %#v", svc.pendingGoalFingerprints)
+	if _, pending := svc.pendingGoalFingerprints[goalPendingFingerprintKey(surfaceID, "thread-1", "clear")]; pending {
+		t.Fatal("expected stale text confirmation fingerprint to be consumed")
 	}
 }
 
@@ -508,6 +508,8 @@ func TestGoalCommandMalformedBudgetFailsClosed(t *testing.T) {
 
 func TestGoalCommandCardFlowPatchesLoadingAndResultOnSameMessage(t *testing.T) {
 	svc, surfaceID, instanceID := goalInterlockTestSetup(t)
+	statusPage := svc.goalStatusPage(svc.root.Surfaces[surfaceID], svc.root.Instances[instanceID].Threads["thread-1"].ThreadGoal)
+	cardAction := goalCardPayloadAction(surfaceID, &statusPage, "pause")
 	events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionGoalCommand,
 		SurfaceSessionID: surfaceID,
@@ -516,6 +518,7 @@ func TestGoalCommandCardFlowPatchesLoadingAndResultOnSameMessage(t *testing.T) {
 		MessageID:        "om-goal-card-1",
 		ThreadID:         "thread-1",
 		InstanceID:       instanceID,
+		GoalOperationID:  cardAction.GoalOperationID,
 		Text:             "/goal pause",
 		CatalogFamilyID:  control.FeishuCommandGoal,
 		CatalogVariantID: "goal.codex.normal",

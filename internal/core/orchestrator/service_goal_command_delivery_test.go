@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
 
 func TestGoalCommandTextAndCardDelivery(t *testing.T) {
@@ -31,6 +32,8 @@ func TestGoalCommandTextAndCardDelivery(t *testing.T) {
 						MessageID: "om-source", Text: command.text,
 					}
 					if card {
+						payload := svc.goalScopedPayload(svc.root.Surfaces[surfaceID], command.text, map[string]any{})
+						action.GoalOperationID, _ = payload[frontstagecontract.CardActionPayloadKeyGoalOperationID].(string)
 						action.InstanceID = instanceID
 						action.ThreadID = "thread-1"
 						action.CatalogFamilyID = control.FeishuCommandGoal

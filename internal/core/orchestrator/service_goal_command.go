@@ -24,6 +24,7 @@ type goalUserCommand struct {
 type pendingGoalFingerprint struct {
 	Fingerprint goalFingerprint
 	CapturedAt  time.Time
+	Status      string
 }
 
 type goalFingerprint struct {
@@ -84,6 +85,9 @@ func (s *Service) handleGoalCommand(surface *state.SurfaceConsoleRecord, action 
 				StatusText: "这张 Goal 卡片不属于当前会话，或缺少会话信息，未执行操作。请发送 `/goal` 重新打开。",
 			})
 		}
+		if sub != "" && !s.goalCardOperationAllows(surface, action, sub) {
+			return []eventcontract.Event{s.pageEvent(surface, s.goalStalePage(surface))}
+		}
 	}
 	switch sub {
 	case "new", "edit":
@@ -95,10 +99,12 @@ func (s *Service) handleGoalCommand(surface *state.SurfaceConsoleRecord, action 
 			})
 		}
 		if objective == "" {
-			s.captureGoalFingerprint(surface, threadID, sub)
+			if !commandCardOwnsInlineResult(action) {
+				s.captureGoalFingerprint(surface, threadID, sub)
+			}
 			return []eventcontract.Event{s.pageEvent(surface, s.goalCommandFormPage(surface, sub))}
 		}
-		if !s.goalFingerprintAllows(surface, threadID, sub) {
+		if !commandCardOwnsInlineResult(action) && !s.goalFingerprintAllows(surface, threadID, sub) {
 			return []eventcontract.Event{s.pageEvent(surface, s.goalStalePage(surface))}
 		}
 		return s.issueGoalCommand(surface, threadID, "set", goalSetCommand(threadID, objective, budget, "user_control"), sourceMessageID)
@@ -114,10 +120,12 @@ func (s *Service) handleGoalCommand(surface *state.SurfaceConsoleRecord, action 
 			}
 		}
 		if !confirm {
-			s.captureGoalFingerprint(surface, threadID, "clear")
+			if !commandCardOwnsInlineResult(action) {
+				s.captureGoalFingerprint(surface, threadID, "clear")
+			}
 			return []eventcontract.Event{s.pageEvent(surface, s.goalClearConfirmPage(surface))}
 		}
-		if !s.goalFingerprintAllows(surface, threadID, "clear") {
+		if !commandCardOwnsInlineResult(action) && !s.goalFingerprintAllows(surface, threadID, "clear") {
 			return []eventcontract.Event{s.pageEvent(surface, s.goalStalePage(surface))}
 		}
 		return s.issueGoalCommand(surface, threadID, "clear", goalClearCommand(threadID, "user_control"), sourceMessageID)
@@ -279,11 +287,11 @@ func (s *Service) applyGoalUserCommandResult(instanceID string, event agentproto
 			page = s.goalSyncPendingPage(surface)
 		}
 	} else if userCommand.Action == "get" && event.GoalMissing {
-		page = goalStatusPage(surface, nil)
+		page = s.goalStatusPage(surface, nil)
 	} else if event.ThreadGoal == nil {
 		page = s.goalSyncPendingPage(surface)
 	} else {
-		page = goalStatusPage(surface, event.ThreadGoal)
+		page = s.goalStatusPage(surface, event.ThreadGoal)
 	}
 	if userCommand.MessageID != "" {
 		page.MessageID = userCommand.MessageID
@@ -334,7 +342,7 @@ func (s *Service) goalCommandFormPage(surface *state.SurfaceConsoleRecord, sub s
 					CommandID:   control.FeishuCommandGoal,
 					CommandText: commandText,
 					SubmitLabel: submitLabel,
-					SubmitValue: goalScopedPayload(surface, commandText, frontstagecontract.ActionPayloadPageSubmit(
+					SubmitValue: s.goalScopedPayload(surface, commandText, frontstagecontract.ActionPayloadPageSubmit(
 						string(control.ActionGoalCommand), control.FeishuActionArgumentText(commandText), "command_args")),
 					Field: control.CommandCatalogFormField{
 						Name:         "command_args",
@@ -347,7 +355,7 @@ func (s *Service) goalCommandFormPage(surface *state.SurfaceConsoleRecord, sub s
 			}},
 		}},
 		RelatedButtons: []control.CommandCatalogButton{
-			goalCommandButton(surface, "取消", "/goal"),
+			s.goalCommandButton(surface, "取消", "/goal"),
 		},
 	})
 }
@@ -363,7 +371,7 @@ func (s *Service) goalErrorPage(surface *state.SurfaceConsoleRecord, title, text
 		ThemeKey:    "primary",
 	}
 	buttons := []control.CommandCatalogButton{
-		goalCommandButton(surface, "刷新", "/goal"),
+		s.goalCommandButton(surface, "刷新", "/goal"),
 	}
 	if goal := s.surfaceGoalForPage(surface); goal != nil && !goal.Cleared {
 		page.BodySections = []control.FeishuCardTextSection{{
@@ -371,14 +379,14 @@ func (s *Service) goalErrorPage(surface *state.SurfaceConsoleRecord, title, text
 			Lines: []string{goal.Objective},
 		}}
 	} else {
-		buttons = append(buttons, goalCommandButton(surface, "创建 Goal", "/goal new"))
+		buttons = append(buttons, s.goalCommandButton(surface, "创建 Goal", "/goal new"))
 	}
 	page.RelatedButtons = buttons
 	return page
 }
 
 func (s *Service) goalClearedPage(surface *state.SurfaceConsoleRecord) control.FeishuPageView {
-	page := goalStatusPage(surface, nil)
+	page := s.goalStatusPage(surface, nil)
 	page.Title = "Goal 已清除"
 	page.StatusKind = "info"
 	page.StatusText = "当前会话的 Goal 已清除，进度与 usage 已清空。"
@@ -395,7 +403,7 @@ func (s *Service) goalSyncPendingPage(surface *state.SurfaceConsoleRecord) contr
 		Interactive: true,
 		ThemeKey:    "primary",
 		RelatedButtons: []control.CommandCatalogButton{
-			goalCommandButton(surface, "刷新", "/goal"),
+			s.goalCommandButton(surface, "刷新", "/goal"),
 		},
 	}
 	if goal := s.surfaceGoalForPage(surface); goal != nil && !goal.Cleared {
@@ -415,16 +423,7 @@ func (s *Service) captureGoalFingerprint(surface *state.SurfaceConsoleRecord, th
 	if surface == nil {
 		return
 	}
-	goal := s.surfaceGoalForPage(surface)
-	fingerprint := goalFingerprint{GoalMissing: goal == nil || goal.Cleared}
-	if goal != nil && !goal.Cleared {
-		fingerprint.CreatedAt = goal.CreatedAt
-		fingerprint.Objective = strings.TrimSpace(goal.Objective)
-		if goal.TokenBudget != nil {
-			value := *goal.TokenBudget
-			fingerprint.TokenBudget = &value
-		}
-	}
+	fingerprint := goalUserFingerprint(s.surfaceGoalForPage(surface))
 	if s.pendingGoalFingerprints == nil {
 		s.pendingGoalFingerprints = map[string]pendingGoalFingerprint{}
 	}
@@ -475,7 +474,7 @@ func goalUserFingerprintMatches(fingerprint goalFingerprint, goal *agentproto.Th
 	return true
 }
 
-func goalStatusPage(surface *state.SurfaceConsoleRecord, goal *agentproto.ThreadGoalUpdate) control.FeishuPageView {
+func (s *Service) goalStatusPage(surface *state.SurfaceConsoleRecord, goal *agentproto.ThreadGoalUpdate) control.FeishuPageView {
 	page := control.FeishuPageView{
 		PageID:      control.FeishuCommandGoal,
 		CommandID:   control.FeishuCommandGoal,
@@ -488,7 +487,7 @@ func goalStatusPage(surface *state.SurfaceConsoleRecord, goal *agentproto.Thread
 			Lines: []string{"当前会话没有 Goal。发送 `/goal new <目标>` 创建，例如：`/goal new 完成登录流程重构`。"},
 		}}
 		page.RelatedButtons = []control.CommandCatalogButton{
-			goalCommandButton(surface, "创建 Goal", "/goal new"),
+			s.goalCommandButton(surface, "创建 Goal", "/goal new"),
 		}
 		return page
 	}
@@ -512,29 +511,29 @@ func goalStatusPage(surface *state.SurfaceConsoleRecord, goal *agentproto.Thread
 		})
 	}
 	buttons := []control.CommandCatalogButton{
-		goalCommandButton(surface, "刷新", "/goal"),
-		goalCommandButton(surface, "编辑", "/goal edit"),
+		s.goalCommandButton(surface, "刷新", "/goal"),
+		s.goalCommandButton(surface, "编辑", "/goal edit"),
 	}
 	switch status {
 	case "active":
-		buttons = append(buttons, goalCommandButton(surface, "暂停", "/goal pause"))
+		buttons = append(buttons, s.goalCommandButton(surface, "暂停", "/goal pause"))
 	case "paused":
-		buttons = append(buttons, goalCommandButton(surface, "恢复", "/goal resume"))
+		buttons = append(buttons, s.goalCommandButton(surface, "恢复", "/goal resume"))
 	case "complete":
-		buttons = append(buttons, goalCommandButton(surface, "新建", "/goal new"))
+		buttons = append(buttons, s.goalCommandButton(surface, "新建", "/goal new"))
 	}
-	buttons = append(buttons, goalCommandButton(surface, "清除", "/goal clear"))
+	buttons = append(buttons, s.goalCommandButton(surface, "清除", "/goal clear"))
 	page.RelatedButtons = buttons
 	return page
 }
 
 func (s *Service) goalClearConfirmPage(surface *state.SurfaceConsoleRecord) control.FeishuPageView {
-	page := goalStatusPage(surface, s.surfaceGoalForPage(surface))
+	page := s.goalStatusPage(surface, s.surfaceGoalForPage(surface))
 	page.Title = "清除 Goal"
 	page.StatusText = "确定要清除当前会话的 Goal 吗？清除后进度与 usage 会一并清空。"
 	page.RelatedButtons = []control.CommandCatalogButton{
-		goalCommandButton(surface, "确认清除", "/goal clear --confirm"),
-		goalCommandButton(surface, "取消", "/goal"),
+		s.goalCommandButton(surface, "确认清除", "/goal clear --confirm"),
+		s.goalCommandButton(surface, "取消", "/goal"),
 	}
 	return page
 }
@@ -552,26 +551,4 @@ func (s *Service) surfaceGoalForPage(surface *state.SurfaceConsoleRecord) *agent
 		return nil
 	}
 	return agentproto.CloneThreadGoalUpdate(thread.ThreadGoal)
-}
-
-func goalCommandButton(surface *state.SurfaceConsoleRecord, label, commandText string) control.CommandCatalogButton {
-	return control.CommandCatalogButton{
-		Label:       label,
-		Kind:        control.CommandCatalogButtonCallbackAction,
-		CommandText: commandText,
-		CommandID:   control.FeishuCommandGoal,
-		CallbackValue: goalScopedPayload(surface, commandText, frontstagecontract.ActionPayloadPageAction(
-			string(control.ActionGoalCommand), control.FeishuActionArgumentText(commandText))),
-	}
-}
-
-func goalScopedPayload(surface *state.SurfaceConsoleRecord, commandText string, payload map[string]any) map[string]any {
-	if surface != nil {
-		payload[frontstagecontract.CardActionPayloadKeyThreadID] = strings.TrimSpace(surface.SelectedThreadID)
-		payload[frontstagecontract.CardActionPayloadKeyInstanceID] = strings.TrimSpace(surface.AttachedInstanceID)
-	}
-	if resolved, ok := control.ResolveFeishuTextCommand(control.CatalogContext{Backend: agentproto.BackendCodex}, commandText); ok {
-		payload = frontstagecontract.ActionPayloadWithCatalog(payload, resolved.FamilyID, resolved.VariantID, string(resolved.Backend))
-	}
-	return payload
 }

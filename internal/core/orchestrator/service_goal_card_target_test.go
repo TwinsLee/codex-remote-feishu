@@ -16,10 +16,10 @@ func TestGoalPagesRenderScopedControls(t *testing.T) {
 	for _, status := range []string{"active", "paused", "complete", "blocked", "missing", "new", "edit", "clear", "error", "sync"} {
 		t.Run(status, func(t *testing.T) {
 			goal := &agentproto.ThreadGoalUpdate{ThreadID: "thread-1", Objective: "目标", Status: status}
-			page := goalStatusPage(surface, goal)
+			page := svc.goalStatusPage(surface, goal)
 			switch status {
 			case "missing":
-				page = goalStatusPage(surface, nil)
+				page = svc.goalStatusPage(surface, nil)
 			case "new", "edit":
 				page = svc.goalCommandFormPage(surface, status)
 			case "clear":

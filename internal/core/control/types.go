@@ -151,6 +151,7 @@ type Action struct {
 	CatalogVariantID    string
 	CatalogBackend      agentproto.Backend
 	CommandID           string
+	GoalOperationID     string
 	ParentCommandText   string
 	InstanceID          string
 	WorkspaceKey        string

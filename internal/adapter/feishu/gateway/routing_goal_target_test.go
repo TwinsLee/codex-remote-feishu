@@ -65,6 +65,7 @@ func TestParsePageCallbacksPreserveOnlyGoalTarget(t *testing.T) {
 							frontstagecontract.CardActionPayloadKeyFieldName:         "command_args",
 							frontstagecontract.CardActionPayloadKeyThreadID:          " thread-original ",
 							frontstagecontract.CardActionPayloadKeyInstanceID:        " instance-original ",
+							frontstagecontract.CardActionPayloadKeyGoalOperationID:   " goal-operation-original ",
 							frontstagecontract.CardActionPayloadKeyCatalogFamilyID:   "source-family",
 							frontstagecontract.CardActionPayloadKeyCatalogVariantID:  "source-variant",
 							frontstagecontract.CardActionPayloadKeyCatalogBackend:    string(agentproto.BackendClaude),
@@ -85,6 +86,13 @@ func TestParsePageCallbacksPreserveOnlyGoalTarget(t *testing.T) {
 			}
 			if action.ThreadID != test.wantThread || action.InstanceID != test.wantInstance {
 				t.Fatalf("target = (%q, %q), want (%q, %q)", action.ThreadID, action.InstanceID, test.wantThread, test.wantInstance)
+			}
+			wantOperation := ""
+			if test.actionKind == control.ActionGoalCommand {
+				wantOperation = "goal-operation-original"
+			}
+			if action.GoalOperationID != wantOperation {
+				t.Fatalf("Goal operation = %q, want %q", action.GoalOperationID, wantOperation)
 			}
 			if action.GatewayID != "app-1" || action.SurfaceSessionID != "surface-1" ||
 				action.ChatID != "chat-1" || action.ActorUserID != "user-1" || action.MessageID != "message-1" {

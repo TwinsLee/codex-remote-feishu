@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-11-13`
-> Summary: 统一持久会话的工作区根目录解析，并补充 Codex 私有更新锁完整写入后原子发布的约束。
+> Summary: 整合工作区根目录解析、私有更新锁原子发布，以及 Goal 卡片一次性操作保护。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -2092,7 +2092,7 @@ retained-offline overlay 额外规则：
 
 2026-08-15 #896 补充：Codex Goal 用户控制面已接入现有命令卡体系。`/goal` 是 config-flow slash command（复用 `FeishuCatalogConfigView` / `FeishuPageView` / 菜单三态 / owner card 状态机）：bare `/goal` 发 `thread/goal/get`（`user_control` provenance）并回显 Goal 状态页；`/goal new|edit <目标> [--budget N]` 创建/编辑，`/goal pause|resume` 动态生效，`/goal clear` 先出确认卡、`--confirm` 后清除；无精确 selected thread / 非 Codex / Review/helper 会话 fail closed。用户动作携带 `user_control`；成功的创建/编辑/暂停/恢复/清除会撤销 queue interlock 的自动恢复所有权，查询不会撤销。若仍处于 `pause_pending` / `quiescing`，只撤销自动恢复权，保留原 idle 屏障；通过 idle 屏障的旧 lease 可直接退役，后续输入重新建立暂停保护；早期保留的屏障在队列排空后清理。状态页复用现有 `pageEvent`：文字入口发新卡，有效卡片入口原位刷新，不新建第二套卡片 carrier。
 
-2026-08-15 #896 review 修复补充：确认卡/编辑表单打开时在服务端暂存当前 thread 的 Goal fingerprint（createdAt/objective/budget），执行 `clear --confirm` / `new|edit` 前先与最新 thread Goal 比对，漂移则取消操作并出错误卡，避免外部 mutation 窗口内的误清/误改；goal 命令 dispatch 失败会清理 pending `goalUserCommands` 并回错误卡，不再静默丢弃；卡片入口触发的 loading 与结果卡通过 `MessageID + Patchable` 在同一 message 上 patch；Goal 按钮与 new/edit 表单复用 `thread_id` / `instance_id` 绑定原目标，缺失或目标变化时拒绝并提示重新发送 `/goal`，仅无目标的 bare `/goal` 菜单入口可查询当前会话。异步结果不向后来选中的另一 thread / instance 展示可操作卡片。查询确认 `GoalMissing` 时清理旧缓存；清除仅在收到 `GoalCleared` 时显示成功。错误卡复用 config 命令 builder（非 sealed），失败原因不伪装成 no-goal 状态。
+2026-08-15 #896 review 修复补充：确认卡/编辑表单打开时在服务端暂存当前 thread 的 Goal fingerprint（createdAt/objective/budget），执行 `clear --confirm` / `new|edit` 前先与最新 thread Goal 比对，漂移则取消操作并出错误卡，避免外部 mutation 窗口内的误清/误改；goal 命令 dispatch 失败会清理 pending `goalUserCommands` 并回错误卡，不再静默丢弃；卡片入口触发的 loading 与结果卡通过 `MessageID + Patchable` 在同一 message 上 patch；Goal 按钮与 new/edit 表单复用 `thread_id` / `instance_id` 绑定原目标，缺失或目标变化时拒绝并提示重新发送 `/goal`，仅无目标的 bare `/goal` 菜单入口可查询当前会话。卡片修改操作另以 `goal_operation_id` 分别绑定 Goal 快照与状态，十分钟内一次性消费；同会话换 Goal、状态变化、缺少或重放标识时拒绝操作，不会借用另一张确认卡或表单的快照。文字命令保留原有确认规则。异步结果不向后来选中的另一 thread / instance 展示可操作卡片。查询确认 `GoalMissing` 时清理旧缓存；清除仅在收到 `GoalCleared` 时显示成功。错误卡复用 config 命令 builder（非 sealed），失败原因不伪装成 no-goal 状态。
 
 ## 11. 待讨论取舍
 

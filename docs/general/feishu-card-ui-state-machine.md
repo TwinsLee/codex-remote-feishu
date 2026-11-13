@@ -849,7 +849,7 @@ MCP request 卡片当前新增的可视语义：
 
 ### 6.5 Predictions 建议与编辑草稿的 freshness
 
-Predictions 通过独立的“下一句建议”页面展示单条建议；“采用并编辑”使用 `page_local_action`，经同步 callback 原位替换为独立编辑表单；采用及可恢复的同步校验拒绝返回的 view 不带 `MessageID`，避免误投影成后台 patch 再与 callback 竞争，记录本身仍保留原卡 ID 供后续失败恢复使用；表单首次填入建议，使用 `multiline_text` 支持换行；用户可修改或清空，清空后不会重新填入建议，“发送”使用 `page_local_submit` 才进入普通输入路径。两种动作都在 callback 的 `request_id` 携带原采样 command ID，gateway 还原为 `PredictionID`；该 ID 不是上游待答问题的 request，也不代表已经发送消息。
+Predictions 通过独立的“下一句建议”页面展示单条建议；“采用并编辑”使用 `page_local_action`，经同步 callback 原位替换为独立编辑表单；采用及可恢复的同步校验拒绝返回的 view 不带 `MessageID`，避免误投影成后台 patch 再与 callback 竞争，记录本身仍保留原卡 ID 供后续失败恢复使用；表单首次填入建议，使用 `multiline_text` 支持换行，输入框 `width=fill` 自适应卡片宽度且标签置于上方；用户可修改或清空，清空后不会重新填入建议，“发送”使用 `page_local_submit` 才进入普通输入路径。两种动作都在 callback 的 `request_id` 携带原采样 command ID，gateway 还原为 `PredictionID`；该 ID 不是上游待答问题的 request，也不代表已经发送消息。
 
 daemon 的通用卡片 freshness 之外，orchestrator 还按原用户、surface、instance、thread、源 turn 与当前易失记录校验采用和发送。新输入、原生新轮次、焦点或选中目标变化、断线、采样超时及草稿过期都会使旧记录失效；跨用户、重复或旧上下文回调只能被拒绝，不能改投当前 thread。采样结果等待上限为 30 秒，超时本地失效并尽力取消；建议与草稿不另加本地时间或长度策略，仍按原上下文重新验证；重启后旧卡没有可恢复的服务端记录。飞书聊天输入框不会被写入，也不依赖正在输入事件或原生 Tab 键。
 

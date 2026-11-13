@@ -155,7 +155,7 @@ func predictionInputDefault(t *testing.T, card feishu.Operation) string {
 	return ""
 }
 
-func TestPredictionDraftUsesMultilineInput(t *testing.T) {
+func TestPredictionDraftUsesFullWidthMultilineInput(t *testing.T) {
 	app, _, _, action := predictionCallbackFixture(t)
 	card := requirePredictionDraftReplacement(t, app.HandleGatewayAction(context.Background(), action))
 	for _, element := range card.CardElements {
@@ -167,6 +167,9 @@ func TestPredictionDraftUsesMultilineInput(t *testing.T) {
 			if field["name"] == "prediction_text" {
 				if field["input_type"] != "multiline_text" {
 					t.Fatalf("prediction input_type=%v, want multiline_text", field["input_type"])
+				}
+				if field["width"] != "fill" || field["label_position"] != "top" {
+					t.Fatalf("prediction editor must fill available width with label above, got width=%v label_position=%v", field["width"], field["label_position"])
 				}
 				return
 			}

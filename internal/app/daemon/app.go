@@ -454,6 +454,10 @@ func (a *App) Run(ctx context.Context) error {
 			errCh <- err
 		}
 	}()
+	managedUpdateCtx, cancelManagedUpdates := context.WithCancel(ctx)
+	defer cancelManagedUpdates()
+	a.warmManagedCodex(managedUpdateCtx, true, nil)
+	go a.runManagedCodexUpdates(managedUpdateCtx)
 	a.ensureCodexRuntimeCapability(ctx)
 	a.ensureCodexNativeConnectionEvidence(ctx)
 	a.startIngressPump(ctx, errCh)

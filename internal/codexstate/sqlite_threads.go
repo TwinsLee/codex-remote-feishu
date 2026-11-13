@@ -347,7 +347,7 @@ type rowScanner interface {
 // can add it without restarting Remote; all access remains read-only.
 func desktopNameColumn(db *sql.DB) (string, error) {
 	var exists bool
-	if err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM pragma_table_info('threads') WHERE name = 'name')").Scan(&exists); err != nil {
+	if err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM pragma_table_info('threads') WHERE lower(name) = 'name')").Scan(&exists); err != nil {
 		return "", err
 	}
 	if exists {

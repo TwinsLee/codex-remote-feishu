@@ -2,7 +2,6 @@ package orchestrator
 
 import (
 	"strings"
-	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -16,11 +15,6 @@ func (s *Service) mergePersistedRecentThreadsForBackend(viewsByID map[string]*me
 	if filterByBackend {
 		threads = s.catalog.recentPersistedThreadsForBackend(backend, persistedRecentThreadLimit)
 	}
-	catalogBackend := agentproto.BackendCodex
-	if filterByBackend {
-		catalogBackend = backend
-	}
-	workspaces := s.catalog.recentPersistedWorkspacesForBackend(catalogBackend, persistedRecentWorkspaceLimit)
 	for i := range threads {
 		thread := threads[i]
 		if strings.TrimSpace(thread.ThreadID) == "" || !ordinaryThreadVisible(&thread) {
@@ -28,15 +22,16 @@ func (s *Service) mergePersistedRecentThreadsForBackend(viewsByID map[string]*me
 		}
 		view := viewsByID[thread.ThreadID]
 		if view == nil {
+			merged := s.mergePersistedThreadMetadata(nil, &thread, agentproto.NormalizeBackend(backend))
 			viewsByID[thread.ThreadID] = &mergedThreadView{
 				ThreadID: thread.ThreadID,
 				Backend:  backend,
-				Inst:     syntheticPersistedThreadInstance(&thread, backend),
-				Thread:   cloneThreadRecord(&thread),
+				Inst:     syntheticPersistedThreadInstance(merged, backend),
+				Thread:   merged,
 			}
 			continue
 		}
-		view.Thread = s.mergePersistedThreadMetadata(view.Thread, &thread, view.Backend, workspaces)
+		view.Thread = s.mergePersistedThreadMetadata(view.Thread, &thread, view.Backend)
 	}
 	// Native loaded lists may contain older threads outside the global recent
 	// window. Refresh their names by identity without changing workspace facts.
@@ -59,7 +54,7 @@ func (s *Service) mergePersistedRecentThreadsForBackend(viewsByID map[string]*me
 // no LastUsedAt, so their winning label can depend on an arbitrary instance ID.
 // When the persisted record supplies the newer cwd, resolve it against known
 // workspace roots instead of treating that copied label as authoritative.
-func (s *Service) mergePersistedThreadMetadata(current, persisted *state.ThreadRecord, backend agentproto.Backend, workspaces map[string]time.Time) *state.ThreadRecord {
+func (s *Service) mergePersistedThreadMetadata(current, persisted *state.ThreadRecord, backend agentproto.Backend) *state.ThreadRecord {
 	merged := mergeThreadMetadata(current, persisted)
 	if merged != nil && persisted != nil && agentproto.NormalizeBackend(backend) == agentproto.BackendCodex {
 		// A saved explicit name is independent of activity recency. Keep the
@@ -85,11 +80,8 @@ func (s *Service) mergePersistedThreadMetadata(current, persisted *state.ThreadR
 	}
 	// Preserve a stable root for an ordinary cwd change within that workspace.
 	consider(merged.WorkspaceKey)
-	// The picker already offers saved workspaces before their runtime exists.
-	// Use the same roots for thread grouping and exact-thread recovery.
-	for key := range workspaces {
-		consider(key)
-	}
+	// RecentWorkspaces groups raw CWD values, which cannot establish a root
+	// over an explicit instance or restored surface workspace.
 	for _, inst := range s.root.Instances {
 		if inst != nil && state.EffectiveInstanceBackend(inst) == backend {
 			consider(instanceWorkspaceClaimKey(inst))

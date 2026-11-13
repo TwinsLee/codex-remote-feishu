@@ -190,13 +190,10 @@ func (s *Service) mergedThreadViewForBackend(surface *state.SurfaceConsoleRecord
 		thread, err := s.catalog.persistedThreadByIDForBackend(backend, threadID)
 		if err == nil && ordinaryThreadVisible(thread) {
 			found = true
+			view.Thread = s.mergePersistedThreadMetadata(view.Thread, thread, backend)
 			if view.Inst == nil {
-				view.Inst = syntheticPersistedThreadInstance(thread, backend)
-				view.Thread = cloneThreadRecord(thread)
+				view.Inst = syntheticPersistedThreadInstance(view.Thread, backend)
 				view.Backend = backend
-			} else {
-				workspaces := s.catalog.recentPersistedWorkspacesForBackend(backend, persistedRecentWorkspaceLimit)
-				view.Thread = s.mergePersistedThreadMetadata(view.Thread, thread, backend, workspaces)
 			}
 		}
 	}
@@ -218,6 +215,7 @@ func (s *Service) persistedThreadView(surface *state.SurfaceConsoleRecord, threa
 	if err != nil || !ordinaryThreadVisible(thread) {
 		return nil
 	}
+	thread = s.mergePersistedThreadMetadata(nil, thread, agentproto.BackendCodex)
 	view := &mergedThreadView{
 		ThreadID: thread.ThreadID,
 		Backend:  agentproto.BackendCodex,

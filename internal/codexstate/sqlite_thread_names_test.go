@@ -15,7 +15,8 @@ func TestSQLiteThreadCatalogReadsDesktopRenamesWithoutActivityChange(t *testing.
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec("ALTER TABLE threads ADD COLUMN name TEXT"); err != nil {
+	// Keep the upstream schema probe's case-insensitive column compatibility.
+	if _, err := db.Exec("ALTER TABLE threads ADD COLUMN NaMe TEXT"); err != nil {
 		t.Fatal(err)
 	}
 	catalog := NewSQLiteThreadCatalog(dbPath, SQLiteThreadCatalogOptions{Logf: func(string, ...any) {}})

@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-11-13`
-> Summary: 整合上游会话归属、托管执行器和退出释放；保留本机 Goal 控制、异步问题卡与严格桌面交接。
+> Summary: 统一 persisted-only 列表与精确恢复的工作区归属，避免将 SQLite 会话 CWD 提升为独立根目录。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -684,7 +684,7 @@ Codex 名称投影：SQLite catalog 兼容读取可选 `name` 列，显式名称
 
 1. target picker 的 workspace 候选按入口分成 attach / list / worktree-base 三种模式。
    1. 在线实例先按可见 thread 的稳定 `WorkspaceKey` 归并 workspace；`thread.CWD` 只保留为最近活跃子目录。只有当某个 instance 当前完全没有可见 thread，或 thread 侧缺失稳定 root 时，才回退到该 instance 的 `WorkspaceKey/WorkspaceRoot`。
-      - 合并较新的持久会话记录时，如果该记录只提供 `CWD`、没有显式 `WorkspaceKey`，以该目录匹配的最具体已知工作区根目录校正归属。已知根目录来自同 backend 的实例、headless surface 和持久工作区目录；有效的原根目录也参与匹配，没有可匹配的根目录才回退到 `CWD`。持久工作区无需已有运行实例：重启后 surface 尚未接管时，列表和按 ID 恢复也使用同一归属。
+      - 合并较新的持久会话记录时，如果该记录只提供 `CWD`、没有显式 `WorkspaceKey`，以该目录匹配的最具体已知工作区根目录校正归属。已知根目录来自同 backend 的实例和恢复后的 headless surface；有效的原根目录也参与匹配，没有可匹配的根目录才回退到 `CWD`。SQLite `RecentWorkspaces` 按原始 `CWD` 聚合，不能作为独立根目录证据。已持久化的 room workspace 无需已有运行实例：重启后 surface 尚未接管时，新建的 persisted-only 列表视图、按 backend 的精确读取和全局精确回退都使用同一归属。
       - 原生全局 thread 列表可能被多个实例重复上报，冷启动后各副本的运行活跃时间又可能为空。副本附带的实例根目录不能覆盖上述校正；最近列表与按 ID 恢复必须使用同一归属规则。
       - 普通子目录下没有独立已知工作区时，保留原稳定根目录；较新的原生记录或持久记录显式提供的 `WorkspaceKey` 继续保持权威。
    2. merged thread views / persisted recent threads 仍会把 recoverable-only workspace 补进候选。

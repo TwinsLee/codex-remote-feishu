@@ -114,7 +114,7 @@ func TestPersistedWorkspaceRecoveryPreservesStableRoots(t *testing.T) {
 		knownChild   bool
 		nativeNewer  bool
 		persistedKey bool
-		savedRoot    string
+		surfaceRoot  string
 		wantChild    bool
 	}{
 		{name: "ordinary subdirectory keeps root", cwd: "src"},
@@ -122,11 +122,11 @@ func TestPersistedWorkspaceRecoveryPreservesStableRoots(t *testing.T) {
 		{name: "a deeper working directory keeps its known workspace", cwd: "memory/src", knownChild: true, wantChild: true},
 		{name: "newer native root remains authoritative", cwd: "memory", knownChild: true, nativeNewer: true},
 		{name: "explicit persisted root remains authoritative", cwd: "memory", knownChild: true, persistedKey: true},
-		{name: "saved nested workspace needs no runtime", cwd: "memory", savedRoot: "memory", wantChild: true},
-		{name: "saved root also covers deeper cwd", cwd: "memory/src", savedRoot: "memory", wantChild: true},
-		{name: "ordinary child cwd retains saved parent root", cwd: "src", savedRoot: "."},
-		{name: "newer native root beats saved child", cwd: "memory", savedRoot: "memory", nativeNewer: true},
-		{name: "explicit persisted root beats saved child", cwd: "memory", savedRoot: "memory", persistedKey: true},
+		{name: "saved nested workspace needs no runtime", cwd: "memory", surfaceRoot: "memory", wantChild: true},
+		{name: "saved root also covers deeper cwd", cwd: "memory/src", surfaceRoot: "memory", wantChild: true},
+		{name: "ordinary child cwd retains saved parent root", cwd: "src", surfaceRoot: "."},
+		{name: "newer native root beats saved child", cwd: "memory", surfaceRoot: "memory", nativeNewer: true},
+		{name: "explicit persisted root beats saved child", cwd: "memory", surfaceRoot: "memory", persistedKey: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			now := time.Date(2026, 10, 20, 6, 0, 0, 0, time.UTC)
@@ -151,9 +151,13 @@ func TestPersistedWorkspaceRecoveryPreservesStableRoots(t *testing.T) {
 			if tc.persistedKey {
 				row.WorkspaceKey = parent
 			}
-			workspaces := map[string]time.Time{}
-			if tc.savedRoot != "" {
-				workspaces[filepath.Join(parent, tc.savedRoot)] = now.Add(-time.Minute)
+			// SQLite RecentWorkspaces groups raw CWD values; these are not stable roots.
+			workspaces := map[string]time.Time{cwd: now.Add(-time.Minute)}
+			if tc.surfaceRoot != "" {
+				svc.MaterializeFeishuRoomState([]state.FeishuRoomStateRecord{{
+					RoomID: "feishu:chat:oc_saved", ChatID: "oc_saved", WorkspaceKey: filepath.Join(parent, tc.surfaceRoot),
+				}})
+				svc.MaterializeSurfaceResume("feishu:app:chat:oc_saved", "app", "oc_saved", "user", state.ProductModeNormal, agentproto.BackendCodex, "", "", "")
 			}
 			svc.SetPersistedThreadCatalog(&fakePersistedThreadCatalog{recent: []state.ThreadRecord{row}, recentWorkspaces: workspaces, byID: map[string]state.ThreadRecord{"thread": row}})
 			want := parent

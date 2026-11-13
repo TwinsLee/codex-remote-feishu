@@ -14,19 +14,19 @@ import (
 
 // After restart the child bot can be detached while the parent and prewarm
 // runtimes already report global thread lists. Listing must not require a
-// running child instance in order to recover that child's saved sessions.
+// running child instance when a restored room explicitly names that workspace.
 func TestPersistedWorkspaceRecoveryDetachedWithoutChildRuntime(t *testing.T) {
 	now := time.Date(2026, 10, 22, 8, 22, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	parent := t.TempDir()
 	child := filepath.Join(parent, "memory")
 	pool := t.TempDir()
-	if err := os.MkdirAll(child, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(child, "src"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	rows := []state.ThreadRecord{
 		{ThreadID: "migrated", Name: "Memory", CWD: child, Loaded: true, LastUsedAt: now.Add(-time.Minute)},
-		{ThreadID: "existing", Name: "Other memory", CWD: child, Loaded: true, LastUsedAt: now.Add(-time.Hour)},
+		{ThreadID: "existing", Name: "Other memory", CWD: filepath.Join(child, "src"), Loaded: true, LastUsedAt: now.Add(-time.Hour)},
 	}
 	for id, root := range map[string]string{"inst-parent": parent, "inst-pool": pool} {
 		svc.UpsertInstance(&state.InstanceRecord{
@@ -34,22 +34,25 @@ func TestPersistedWorkspaceRecoveryDetachedWithoutChildRuntime(t *testing.T) {
 			Source: "headless", Backend: agentproto.BackendCodex, Managed: true, Online: true,
 			Threads: map[string]*state.ThreadRecord{
 				"migrated": {ThreadID: "migrated", Name: "Memory", CWD: parent, WorkspaceKey: root},
-				"existing": {ThreadID: "existing", Name: "Other memory", CWD: child, WorkspaceKey: root},
+				"existing": {ThreadID: "existing", Name: "Other memory", CWD: filepath.Join(child, "src"), WorkspaceKey: root},
 			},
 		})
 	}
 	svc.SetPersistedThreadCatalog(&fakePersistedThreadCatalog{
-		recent: rows, recentWorkspaces: map[string]time.Time{child: now.Add(-time.Minute)},
+		recent: rows, recentWorkspaces: map[string]time.Time{child: now.Add(-time.Minute), filepath.Join(child, "src"): now.Add(-time.Hour)},
 		byID: map[string]state.ThreadRecord{"migrated": rows[0], "existing": rows[1]},
 	})
-	for _, id := range []string{"parent", "memory"} {
-		svc.MaterializeSurfaceResume(id, id, id, "user", state.ProductModeNormal, agentproto.BackendCodex, "", "", "")
-	}
+	svc.MaterializeSurfaceResume("parent", "parent", "parent", "user", state.ProductModeNormal, agentproto.BackendCodex, "", "", "")
+	svc.MaterializeFeishuRoomState([]state.FeishuRoomStateRecord{{
+		RoomID: "feishu:chat:oc_memory", ChatID: "oc_memory", WorkspaceKey: child,
+	}})
+	const memorySurfaceID = "feishu:memory:chat:oc_memory"
+	svc.MaterializeSurfaceResume(memorySurfaceID, "memory", "oc_memory", "user", state.ProductModeNormal, agentproto.BackendCodex, "", "", "")
 	owner := svc.root.Surfaces["parent"]
 	owner.AttachedInstanceID = "inst-parent"
 	owner.ClaimedWorkspaceKey = parent
 	svc.bindInstanceClaim(owner, owner.AttachedInstanceID)
-	surface := svc.root.Surfaces["memory"]
+	surface := svc.root.Surfaces[memorySurfaceID]
 	options := svc.targetPickerSessionOptions(surface, workspaceSelectionEntry{workspaceKey: child}, control.TargetPickerRequestSourceList, true)
 	for _, row := range rows {
 		if !targetPickerHasSessionOption(options, targetPickerThreadValue(row.ThreadID)) {
@@ -65,8 +68,8 @@ func TestPersistedWorkspaceRecoveryDetachedWithoutChildRuntime(t *testing.T) {
 			t.Errorf("child session must be recoverable without claiming parent: %#v", target)
 		}
 	}
-	if surface.AttachedInstanceID != "" || surface.ClaimedWorkspaceKey != "" || surface.SelectedThreadID != "" {
-		t.Fatal("listing must not attach or claim the detached bot")
+	if surface.AttachedInstanceID != "" || !testutil.SamePath(surface.ClaimedWorkspaceKey, child) || surface.SelectedThreadID != "" {
+		t.Fatal("listing must preserve the restored workspace without attaching the detached bot")
 	}
 	if owner.AttachedInstanceID != "inst-parent" || !testutil.SamePath(owner.ClaimedWorkspaceKey, parent) {
 		t.Fatal("listing must not change the parent bot's attachment")

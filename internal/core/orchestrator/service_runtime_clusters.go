@@ -188,7 +188,10 @@ func (r *serviceCatalogRuntime) recentPersistedThreadsForBackend(backend agentpr
 		for i := range cached {
 			// A failed read may retain fallback metadata, but it must not turn
 			// an old desktop name into a fresh authoritative rename.
-			cached[i].PersistedName = ""
+			if cached[i].PersistedName != "" {
+				cached[i].Name = ""
+				cached[i].PersistedName = ""
+			}
 		}
 		return cached
 	}

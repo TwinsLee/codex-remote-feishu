@@ -115,7 +115,8 @@ func TestSQLiteThreadCatalogExplicitNamesUsesBoundedFilteredIdentityReads(t *tes
 	if _, err := db.Exec("UPDATE threads SET name = '桌面新名'"); err != nil {
 		t.Fatal(err)
 	}
-	ids := make([]string, 420)
+	// Exceed SQLite parameter limits to verify batching rather than merely small fixtures.
+	ids := make([]string, 33_000)
 	for i := range ids {
 		ids[i] = fmt.Sprintf("not-found-%d", i)
 	}

@@ -206,3 +206,21 @@ func TestDesktopBatchNameReadFailureRetainsNativeName(t *testing.T) {
 		}
 	}
 }
+
+func TestDesktopNameFailedReadWithNewerCachedActivityKeepsNativeName(t *testing.T) {
+	svc, surface, _ := desktopNameFixture(t)
+	row := state.ThreadRecord{
+		ThreadID: "thread", CWD: surface.ClaimedWorkspaceKey,
+		Name: "旧桌面名称", PersistedName: "旧桌面名称", LastUsedAt: time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC),
+	}
+	catalog := &fakePersistedThreadCatalog{recent: []state.ThreadRecord{row}, byID: map[string]state.ThreadRecord{"thread": row}}
+	svc.SetPersistedThreadCatalog(catalog)
+	_ = svc.mergedThreadViews(surface)
+	svc.ApplyAgentEvent("inst", agentproto.Event{Kind: agentproto.EventThreadDiscovered, ThreadID: "thread", Name: "刚收到的新名称"})
+	catalog.recentErr, catalog.byIDErr = errors.New("database busy"), errors.New("database busy")
+	for _, view := range svc.mergedThreadViews(surface) {
+		if view.ThreadID == "thread" && view.Thread.Name != "刚收到的新名称" {
+			t.Fatalf("cached activity promoted an old explicit name after read failure: %q", view.Thread.Name)
+		}
+	}
+}

@@ -3,7 +3,6 @@ package orchestrator
 import (
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -12,7 +11,6 @@ import (
 )
 
 const predictionTimeout = 30 * time.Second
-const predictionDraftTTL = 10 * time.Minute
 
 // One ephemeral record per surface also remembers consumed/expired source turns.
 type predictionRecord struct {
@@ -167,11 +165,7 @@ func (s *Service) expirePredictions(now time.Time) []eventcontract.Event {
 		if p.Canceled {
 			continue
 		}
-		limit := predictionDraftTTL
-		if p.Pending {
-			limit = predictionTimeout
-		}
-		if now.Sub(p.StartedAt) >= limit || !s.predictionTargetCurrent(p) {
+		if (p.Pending && now.Sub(p.StartedAt) >= predictionTimeout) || !s.predictionTargetCurrent(p) {
 			events = append(events, s.invalidatePrediction(p)...)
 		}
 	}
@@ -203,8 +197,8 @@ func (s *Service) applyPredictionResult(instanceID string, event agentproto.Even
 			p.Canceled = true
 			return nil
 		}
-		p.Suggestion = strings.TrimSpace(event.Prediction.Suggestion)
-		if p.Suggestion == "" || utf8.RuneCountInString(p.Suggestion) > 200 {
+		p.Suggestion = event.Prediction.Suggestion
+		if p.Suggestion == "" {
 			p.Canceled = true
 			return nil
 		}
@@ -216,7 +210,7 @@ func (s *Service) applyPredictionResult(instanceID string, event agentproto.Even
 func (s *Service) handlePredictionAction(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
 	p := s.predictions[surface.SurfaceSessionID]
 	if p == nil || p.ID != action.PredictionID || p.ActorUserID != action.ActorUserID || p.Pending || p.Suggestion == "" ||
-		!s.predictionTargetCurrent(p) || s.now().Sub(p.StartedAt) >= predictionDraftTTL {
+		!s.predictionTargetCurrent(p) {
 		return notice(surface, "prediction_expired", "这条建议已失效或不属于当前用户，请继续直接输入消息。")
 	}
 	if p.Submitting {
@@ -295,7 +289,7 @@ func (s *Service) restorePredictionDraftAfterDispatchFailure(surfaceID, commandI
 	}
 	p.Submitting = false
 	p.SendQueueItemID, p.SendCommandID = "", ""
-	if !s.predictionTargetCurrent(p) || s.now().Sub(p.StartedAt) >= predictionDraftTTL {
+	if !s.predictionTargetCurrent(p) {
 		s.invalidatePrediction(p)
 		return nil
 	}

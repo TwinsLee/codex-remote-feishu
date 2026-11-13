@@ -141,7 +141,7 @@ func TestPredictionRejectedSendRetainsEditedDraft(t *testing.T) {
 }
 
 func TestPredictionFailureDoesNotReviveInvalidatedDraft(t *testing.T) {
-	for _, change := range []string{"input", "route", "expired", "other-command"} {
+	for _, change := range []string{"input", "route", "invalidated", "other-command"} {
 		t.Run(change, func(t *testing.T) {
 			svc, sid, iid := predictionTestSetup(t)
 			request := findAgentCommand(predictionCompleteTurn(t, svc, sid, iid), predictionRequestKind)
@@ -157,8 +157,8 @@ func TestPredictionFailureDoesNotReviveInvalidatedDraft(t *testing.T) {
 				svc.ApplySurfaceAction(control.Action{Kind: control.ActionTextMessage, SurfaceSessionID: sid, ChatID: "chat-1", ActorUserID: "user-1", MessageID: "new-input", Text: "用户的新输入"})
 			case "route":
 				svc.root.Surfaces[sid].SelectedThreadID = "another-thread"
-			case "expired":
-				svc.predictions[sid].StartedAt = svc.now().Add(-predictionDraftTTL)
+			case "invalidated":
+				svc.invalidatePrediction(svc.predictions[sid])
 			case "other-command":
 				failureID = "unrelated-command"
 			}

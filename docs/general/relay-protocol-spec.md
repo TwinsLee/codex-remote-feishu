@@ -656,13 +656,15 @@ Predictions 使用独立 command/result，不产生普通代理 turn，也不与
 
 - `thread.prediction.request`：`commandId` 唯一标识本次采样，`target.threadId` 是当前用户根线程，`prediction.sourceTurnId` 是已成功结束的源轮次；`origin.surface` / `origin.userId` 保留发起 surface 和用户。`prediction.instanceId` 冻结原实例，仅供 daemon 选路，不作为 `thread/sample` 参数。
 - `thread.prediction.cancel`：同样保留原实例和 thread，`prediction.requestCommandId` 指向原采样 command；不能随 surface 后续切换改投另一个实例。
-- `thread.prediction.result`：事件 `commandId` 回指原 request，`threadId` 与 `prediction.sourceTurnId` 保留源绑定。`prediction.suggestion` 是最多 200 个 Unicode 字符的单条建议；无文本或空建议不展示，解析错误通过 `errorMessage` 返回。`prediction.unsupported=true` 表示采样 RPC 返回 `-32601`，或返回 `-32600` 且消息严格以 ``Invalid request: unknown variant `thread/sample`,`` 开头；源轮次过期、未加载或其他方法错误不能标为不支持。
+- `thread.prediction.result`：事件 `commandId` 回指原 request，`threadId` 与 `prediction.sourceTurnId` 保留源绑定。`prediction.suggestion` 是按桌面原生 schema 解析的单条建议，不另加长度或语言限制；无文本或空建议不展示，解析错误通过 `errorMessage` 返回。`prediction.unsupported=true` 表示采样 RPC 返回 `-32601`，或返回 `-32600` 且消息严格以 ``Invalid request: unknown variant `thread/sample`,`` 开头；源轮次过期、未加载或其他方法错误不能标为不支持。
 
 Codex wrapper 显式声明 `Capabilities.ThreadPrediction`（wire 字段 `threadPrediction`），仅证明 wrapper 能译码这些 command，不能证明其底层 CLI 支持采样。旧 wrapper 未显式声明时不发送新 command，也不把能力补入 legacy 默认值。底层 CLI 返回上述明确不支持错误后，orchestrator 在本次实例连接内停止自动采样，并只提示一次；断线后的新连接重新判定。其他采样失败不影响原会话的正常完成结果。
 
-translator 把 request 译为 `thread/sample`，携带 `threadId`、`expectedTurnId`、单条中文建议的 JSON prompt、`threadSource=turnTrigger=composer_predictions` 与 `disableMcp=true`；取消译为 `thread/sample/cancel {requestId: 原采样 RPC id}`。RPC id 与原 command 的关联只由 translator 自己的 pending map 持有；只消费自己拥有的采样和取消响应，取消后的迟到结果丢弃，其他原生请求/响应继续透传。这条路径不创建或切换会话，不发送普通 turn，也不改 translator 的 `currentThreadID` 或普通 turn 模板。
+wrapper 使用当前 native 的 `getAuthStatus`、`account/read` 与 `configRequirements/read` 取得同一账号的 backend auth/routing，在本机读取桌面使用的 `/wham/predictions/config`；凭据不进入 relay 或父客户端。配置按原生 principal 缓存 5 分钟；禁用、缺失或获取失败时不生成建议，没有自拟提示词或固定快照作为兜底。沿桌面逻辑恢复原 thread 读取当前模型与模式，排除 plan、非 openai provider 及官方 unsupported_models；模型继承原 thread，effort 采用官方 prediction_reasoning_effort，空值继承父轮次，不自行选模型或调强度。当前只接 live 完成触发，遵循官方 live_sample_rate。
 
-采样要求 native source 已加载、是持久化根线程，且 `expectedTurnId` 仍为最新已结束轮次；不通过新 CLI、普通 fork/turn 或工具调用作兼容降级。`disableMcp` 不是“关闭所有工具”的承诺；采样无文本、返回工具尝试或不符合单字段 JSON 格式时均不展示建议。本地隔离 mock 在 `0.167.0-alpha.4.1` 验证了上下文继承、源历史不变和工具尝试不执行，这些证据不能泛化到所有 runtime。为兼容更早支持采样的版本，当前请求省略新增的 `interruptOnCancel` 参数；30 秒后本地失效并发送尽力取消，尚未验证省略参数时实际推理何时停止，不保证立即停止或零额外费用。真实模型权限、延迟、建议质量及费用尚未验证；采样用量按实际 provider 规则计算，不承诺桌面官方免费策略。
+translator 把准备后的 request 译为 `thread/sample`，prompt 为官方正文追加桌面原样的 nullable suggestion JSON schema 后缀；携带 `threadId`、`expectedTurnId`、effort、`threadSource=turnTrigger=composer_predictions`、`disableMcp=true` 与原生 source/turn/trigger metadata。解析与桌面相同：suggestion 可为 string/null，字符串 trim，额外 JSON 属性忽略，不另加中文或 200 字限制。取消译为 `thread/sample/cancel {requestId: 原采样 RPC id}`。RPC id 与原 command 的关联只由 translator 自己的 pending map 持有；只消费自己拥有的采样和取消响应，取消后的迟到结果丢弃，其他原生请求/响应继续透传。这条路径不创建或切换会话，不发送普通 turn，也不改 translator 的 `currentThreadID` 或普通 turn 模板。
+
+采样要求 native source 已加载、是持久化根线程，且 `expectedTurnId` 仍为最新已结束轮次；不通过普通 fork/turn 或工具调用作兼容降级。`disableMcp` 不是“关闭所有工具”的承诺；无文本、工具尝试或无有效 suggestion 时不展示建议。原生 30 秒超时及取消关联保留；`interruptOnCancel` 只有桌面特性开关和版本同时支持才开启，Remote 未取得该开关时不自行开启。官方提示词与参数的移植不代表已搬运桌面 Statsig moderation policy、灰度开关或 catch-up/new-thread 预测；不自造相应阈值或策略。传输与草稿保护不替代原生产品的这些控制。
 
 ### 5.4.4 Capability / account / app / MCP status state
 

@@ -5,13 +5,21 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/jsonrpcutil"
 )
 
-const predictionSamplePrompt = "根据当前对话，为用户拟写下一条可发送的简短中文消息。只返回JSON对象，格式为{\"suggestion\":\"消息\"}。只给一条建议；没有合适建议时返回{\"suggestion\":\"\"}。不要执行任务，不要调用工具。"
+// PredictionOptions comes from the same authenticated configuration as the desktop.
+// There is deliberately no locally authored prediction prompt.
+type PredictionOptions struct {
+	Prompt            string
+	Effort            *string
+	InterruptOnCancel bool
+	GenerationTrigger string
+}
+
+const predictionSuggestionSchema = `{"type":"object","properties":{"suggestion":{"type":["string","null"]}},"required":["suggestion"],"additionalProperties":false}`
 
 type pendingPrediction struct {
 	CommandID    string
@@ -20,7 +28,10 @@ type pendingPrediction struct {
 	Canceled     bool
 }
 
-func (t *Translator) translatePredictionRequest(command agentproto.Command) ([][]byte, error) {
+func (t *Translator) TranslatePredictionRequest(command agentproto.Command, options PredictionOptions) ([][]byte, error) {
+	if strings.TrimSpace(options.Prompt) == "" {
+		return nil, fmt.Errorf("prediction requires official desktop configuration")
+	}
 	commandID := strings.TrimSpace(command.CommandID)
 	threadID := strings.TrimSpace(command.Target.ThreadID)
 	sourceTurnID := strings.TrimSpace(command.Prediction.SourceTurnID)
@@ -33,13 +44,23 @@ func (t *Translator) translatePredictionRequest(command agentproto.Command) ([][
 		}
 	}
 	requestID := t.NextRequest("prediction-sample")
-	raw, err := json.Marshal(map[string]any{
-		"id": requestID, "method": "thread/sample",
-		"params": map[string]any{
-			"threadId": threadID, "expectedTurnId": sourceTurnID,
-			"prompt": predictionSamplePrompt, "threadSource": "composer_predictions",
-			"turnTrigger": "composer_predictions", "disableMcp": true,
+	params := map[string]any{
+		"threadId": threadID, "expectedTurnId": sourceTurnID,
+		"prompt":       options.Prompt + "\n\nReturn only JSON matching this schema: " + predictionSuggestionSchema + ".",
+		"effort":       options.Effort,
+		"threadSource": "composer_predictions", "turnTrigger": "composer_predictions",
+		"responsesapiClientMetadata": map[string]string{
+			"prediction_source_thread_id": threadID,
+			"prediction_source_turn_id":   sourceTurnID,
+			"prediction_trigger":          options.GenerationTrigger,
 		},
+		"disableMcp": true,
+	}
+	if options.InterruptOnCancel {
+		params["interruptOnCancel"] = true
+	}
+	raw, err := json.Marshal(map[string]any{
+		"id": requestID, "method": "thread/sample", "params": params,
 	})
 	if err != nil {
 		return nil, err
@@ -130,32 +151,35 @@ func parsePredictionSuggestion(text string) (string, error) {
 		return "", nil
 	}
 	decoder := json.NewDecoder(strings.NewReader(text))
-	start, err := decoder.Token()
-	if err != nil || start != json.Delim('{') {
+	var object map[string]json.RawMessage
+	if err := decoder.Decode(&object); err != nil || object == nil {
 		return "", fmt.Errorf("prediction JSON must be an object")
 	}
-	key, err := decoder.Token()
-	if err != nil || key != "suggestion" {
+	raw, exists := object["suggestion"]
+	if !exists {
 		return "", fmt.Errorf("prediction JSON requires the suggestion key")
 	}
 	var value *string
-	if err := decoder.Decode(&value); err != nil {
-		return "", fmt.Errorf("invalid prediction JSON: %w", err)
-	}
-	if value == nil {
-		return "", fmt.Errorf("prediction JSON requires a suggestion string")
-	}
-	end, err := decoder.Token()
-	if err != nil || end != json.Delim('}') {
-		return "", fmt.Errorf("prediction JSON must contain only one suggestion")
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", fmt.Errorf("prediction JSON requires a suggestion string or null")
 	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
 		return "", fmt.Errorf("prediction JSON must contain one object")
 	}
-	suggestion := strings.TrimSpace(*value)
-	if utf8.RuneCountInString(suggestion) > 200 {
-		return "", fmt.Errorf("prediction suggestion exceeds 200 characters")
+	if value == nil {
+		return "", nil
 	}
-	return suggestion, nil
+	return trimPredictionSuggestion(*value), nil
+}
+
+func trimPredictionSuggestion(value string) string {
+	return strings.TrimFunc(value, func(r rune) bool {
+		switch r {
+		case '\t', '\n', '\v', '\f', '\r', ' ', '\u00a0', '\u1680', '\u2028', '\u2029', '\u202f', '\u205f', '\u3000', '\ufeff':
+			return true
+		default:
+			return r >= '\u2000' && r <= '\u200a'
+		}
+	})
 }

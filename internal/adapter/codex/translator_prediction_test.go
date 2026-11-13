@@ -20,9 +20,20 @@ func predictionCommand(id string) agentproto.Command {
 	}
 }
 
+func predictionTestOptions() PredictionOptions {
+	effort := "high"
+	return PredictionOptions{Prompt: "Official prediction prompt fixture", Effort: &effort, GenerationTrigger: "live"}
+}
+
 func predictionRequest(t *testing.T, tr *Translator, command agentproto.Command) map[string]any {
 	t.Helper()
-	frames, err := tr.TranslateCommand(command)
+	var frames [][]byte
+	var err error
+	if command.Kind == agentproto.CommandThreadPredictionRequest {
+		frames, err = tr.TranslatePredictionRequest(command, predictionTestOptions())
+	} else {
+		frames, err = tr.TranslateCommand(command)
+	}
 	if err != nil || len(frames) != 1 {
 		t.Fatalf("prediction request = %d frames, %v; want one native request", len(frames), err)
 	}
@@ -80,8 +91,10 @@ func TestPredictionSampleUsesOwnedRPCWithoutChangingConversation(t *testing.T) {
 	params := request["params"].(map[string]any)
 	want := map[string]any{
 		"threadId": "source-thread", "expectedTurnId": "source-turn",
-		"prompt":       "根据当前对话，为用户拟写下一条可发送的简短中文消息。只返回JSON对象，格式为{\"suggestion\":\"消息\"}。只给一条建议；没有合适建议时返回{\"suggestion\":\"\"}。不要执行任务，不要调用工具。",
-		"threadSource": "composer_predictions", "turnTrigger": "composer_predictions", "disableMcp": true,
+		"prompt":                     "Official prediction prompt fixture\n\nReturn only JSON matching this schema: {\"type\":\"object\",\"properties\":{\"suggestion\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"suggestion\"],\"additionalProperties\":false}.",
+		"effort":                     "high",
+		"responsesapiClientMetadata": map[string]any{"prediction_source_thread_id": "source-thread", "prediction_source_turn_id": "source-turn", "prediction_trigger": "live"},
+		"threadSource":               "composer_predictions", "turnTrigger": "composer_predictions", "disableMcp": true,
 	}
 	if !reflect.DeepEqual(params, want) {
 		t.Fatalf("unexpected sample params: %#v", params)
@@ -112,15 +125,15 @@ func TestPredictionSampleStrictJSONAndEmptyText(t *testing.T) {
 		{"null tools or no text", nil, "", false},
 		{"empty suggestion", `{"suggestion":""}`, "", false},
 		{"invalid JSON", "not JSON", "", true},
-		{"extra key", `{"suggestion":"继续","tool":"shell"}`, "", true},
+		{"extra key", `{"suggestion":"继续","tool":"shell"}`, "\u7ee7\u7eed", false},
 		{"trailing JSON", `{"suggestion":"继续"} {}`, "", true},
 		{"wrong type", `{"suggestion":1}`, "", true},
 		{"wrong key casing", `{"Suggestion":"继续"}`, "", true},
-		{"duplicate key", `{"suggestion":"一","suggestion":"二"}`, "", true},
-		{"null suggestion", `{"suggestion":null}`, "", true},
+		{"duplicate key", `{"suggestion":"一","suggestion":"二"}`, "\u4e8c", false},
+		{"null suggestion", `{"suggestion":null}`, "", false},
 		{"null JSON", `null`, "", true},
 		{"missing suggestion", `{}`, "", true},
-		{"too long", `{"suggestion":"` + strings.Repeat("中", 201) + `"}`, "", true},
+		{"no desktop length cap", `{"suggestion":"` + strings.Repeat("中", 201) + `"}`, strings.Repeat("\u4e2d", 201), false},
 		{"rune limit", `{"suggestion":"` + strings.Repeat("中", 200) + `"}`, strings.Repeat("中", 200), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -272,7 +285,14 @@ func TestPredictionMissingParametersAreRejected(t *testing.T) {
 			case "cancel reference":
 				command.Kind = agentproto.CommandThreadPredictionCancel
 			}
-			frames, err := NewTranslator("instance-original").TranslateCommand(command)
+			tr := NewTranslator("instance-original")
+			var frames [][]byte
+			var err error
+			if command.Kind == agentproto.CommandThreadPredictionRequest {
+				frames, err = tr.TranslatePredictionRequest(command, predictionTestOptions())
+			} else {
+				frames, err = tr.TranslateCommand(command)
+			}
 			if err == nil || len(frames) != 0 {
 				t.Fatalf("missing %s must fail before upstream request: %q %v", missing, frames, err)
 			}

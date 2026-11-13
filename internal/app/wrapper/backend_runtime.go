@@ -263,10 +263,11 @@ func mapOpenCodeResolvedCommandResponses(responses []acpadapter.ResolvedCommandR
 }
 
 type codexBackendRuntime struct {
-	mu           sync.Mutex
-	translator   *codex.Translator
-	shellCommand *shellCommandRuntime
-	predictions  *predictionRuntime
+	mu              sync.Mutex
+	translator      *codex.Translator
+	shellCommand    *shellCommandRuntime
+	predictions     *predictionRuntime
+	nativeUserAgent string
 }
 
 func (r *codexBackendRuntime) Backend() agentproto.Backend {

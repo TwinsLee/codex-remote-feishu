@@ -48,6 +48,7 @@ type Translator struct {
 	pendingThreadReads        map[string]pendingThreadRead
 	pendingPredictions        map[string]pendingPrediction
 	pendingPredictionCancels  map[string]bool
+	predictionModeration      predictionModerationState
 	lastOwnedGoalMutations    map[string]ownedGoalMutation
 	reasoningSummaryIndexes   map[string]map[int]bool
 }

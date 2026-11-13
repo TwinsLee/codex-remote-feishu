@@ -30,7 +30,7 @@ type predictionRPCResponse struct {
 }
 
 func newPredictionRuntime() *predictionRuntime {
-	return &predictionRuntime{jobs: make(map[string]*predictionJob), pending: make(map[string]chan predictionRPCResponse), cache: make(map[string]predictionConfigCache), httpClient: &http.Client{Timeout: 30 * time.Second}, now: time.Now, sample: rand.Float64}
+	return &predictionRuntime{jobs: make(map[string]*predictionJob), pending: make(map[string]chan predictionRPCResponse), cache: make(map[string]predictionConfigCache), httpClient: &http.Client{Timeout: 30 * time.Second}, now: time.Now, sample: rand.Float64, desktopContext: readPredictionDesktopContext}
 }
 
 // HandlePrediction returns immediately so native preparation never blocks relay commands.
@@ -247,12 +247,14 @@ func (r *codexBackendRuntime) preparePrediction(job *predictionJob, frames chan<
 	if json.Unmarshal(resume, &state) != nil || state.ModelProvider != "openai" || state.Model == "" || (state.CollaborationMode != nil && state.CollaborationMode.Mode == "plan") || slices.Contains(config.UnsupportedModels, state.Model) {
 		return
 	}
+	controls := r.predictionControlsForJob(job, token, identity, routing)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if job.ctx.Err() != nil || r.predictions.jobs[command.CommandID] != job {
 		return
 	}
-	outbound, err := r.translator.TranslatePredictionRequest(command, codex.PredictionOptions{Prompt: config.Prompt, Effort: config.Effort, GenerationTrigger: "live"})
+	r.translator.SetPredictionPolicy(controls.ModerationPolicy)
+	outbound, err := r.translator.TranslatePredictionRequest(command, codex.PredictionOptions{Prompt: config.Prompt, Effort: config.Effort, GenerationTrigger: "live", InterruptOnCancel: controls.InterruptOnCancel && predictionInterruptSupported(r.nativeUserAgent)})
 	if err != nil {
 		return
 	}

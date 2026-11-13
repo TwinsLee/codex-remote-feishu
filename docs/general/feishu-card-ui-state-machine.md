@@ -853,7 +853,7 @@ Predictions 通过独立的“下一句建议”页面展示单条建议；“�
 
 daemon 的通用卡片 freshness 之外，orchestrator 还按原用户、surface、instance、thread、源 turn 与当前易失记录校验采用和发送。新输入、原生新轮次、焦点或选中目标变化、断线、采样超时及草稿过期都会使旧记录失效；跨用户、重复或旧上下文回调只能被拒绝，不能改投当前 thread。采样结果等待上限为 30 秒，超时本地失效并尽力取消；建议与草稿不另加本地时间或长度策略，仍按原上下文重新验证；重启后旧卡没有可恢复的服务端记录。飞书聊天输入框不会被写入，也不依赖正在输入事件或原生 Tab 键。
 
-独立表单不覆盖普通草稿载体。编辑提交绑定原 queue item 与实际 command，排队或派发期间拒绝重复提交；校验拒绝、派发失败及 wrapper 显式拒绝时，在原 `MessageID` 上保留用户编辑内容供手动重试，不自动重发。其他命令失败及已因新输入、切换或过期而失效的记录不能复活草稿。原生 `RuntimeStatus=active` 及 active 快照也会拦截旧建议，恢复 idle 不会恢复已失效记录。这些行为已有本地回归；内容来自官方动态提示词与原生 sample 结果，飞书侧只承接展示、编辑和显式发送。核心生命周期见 [remote surface 4.19](./remote-surface-state-machine.md#419-predictions-是绑定原上下文的易失建议不是新的执行队列)。
+独立表单不覆盖普通草稿载体。编辑提交绑定原 queue item 与实际 command，排队或派发期间拒绝重复提交；校验拒绝、派发失败及 wrapper 显式拒绝时，在原 `MessageID` 上保留用户编辑内容供手动重试，不自动重发。其他命令失败及已因新输入、切换或过期而失效的记录不能复活草稿。原生 `RuntimeStatus=active` 及 active 快照也会拦截旧建议，恢复 idle 不会恢复已失效记录。这些行为已有本地回归；内容来自官方动态提示词与原生 sample 结果，飞书侧只承接展示、编辑和显式发送；官方 moderation policy 命中时采样结果为空，不再展示建议，也不在飞书层补充分类或改写。核心生命周期见 [remote surface 4.19](./remote-surface-state-machine.md#419-predictions-是绑定原上下文的易失建议不是新的执行队列)。
 
 ## 7. 当前回归基线
 

@@ -28,7 +28,7 @@ func predictionToken(t *testing.T, user, account string) string {
 func TestPredictionOfficialConfigHeadersCacheAndExpiry(t *testing.T) {
 	t.Setenv("CODEX_API_BASE_URL", "")
 	t.Setenv("CODEX_API_ENDPOINT", "")
-	state := newPredictionRuntime()
+	state := newTestPredictionRuntime()
 	now := time.Now()
 	state.now = func() time.Time { return now }
 	token := predictionToken(t, "user", "account")
@@ -120,7 +120,7 @@ func TestPredictionConfigNeverFollowsCredentialRedirect(t *testing.T) {
 		http.Redirect(w, r, "https://unknown.example/secret", http.StatusFound)
 	}))
 	defer server.Close()
-	state := newPredictionRuntime()
+	state := newTestPredictionRuntime()
 	state.httpClient = server.Client()
 	token := predictionToken(t, "user", "account")
 	identity, err := parsePredictionIdentity(token)
@@ -135,7 +135,7 @@ func TestPredictionConfigNeverFollowsCredentialRedirect(t *testing.T) {
 
 func TestPredictionConfigUsesOfficialBaseOverridePath(t *testing.T) {
 	t.Setenv("CODEX_API_BASE_URL", " https://configured.example/custom-api/// ")
-	state := newPredictionRuntime()
+	state := newTestPredictionRuntime()
 	state.httpClient = &http.Client{Transport: predictionRoundTrip(func(req *http.Request) (*http.Response, error) {
 		if req.URL.String() != "https://native.example/custom-api/wham/predictions/config" || req.Header.Get("X-OpenAI-Account-Routing-Override") != "" {
 			t.Fatal("base override/native origin or unconstrained header differs from desktop")
@@ -155,7 +155,7 @@ func TestPredictionConfigUsesOfficialBaseOverridePath(t *testing.T) {
 func TestPredictionConfigFailureIsCachedForDesktopTTL(t *testing.T) {
 	for _, body := range []string{"http-error", "invalid-json"} {
 		t.Run(body, func(t *testing.T) {
-			state := newPredictionRuntime()
+			state := newTestPredictionRuntime()
 			now := time.Now()
 			state.now = func() time.Time { return now }
 			requests := 0
@@ -190,7 +190,7 @@ func TestPredictionConfigFailureIsCachedForDesktopTTL(t *testing.T) {
 }
 
 func TestPredictionConfigCancellationDoesNotCacheUnavailable(t *testing.T) {
-	state := newPredictionRuntime()
+	state := newTestPredictionRuntime()
 	ctx, cancel := context.WithCancel(context.Background())
 	requests := 0
 	state.httpClient = &http.Client{Transport: predictionRoundTrip(func(req *http.Request) (*http.Response, error) {
@@ -216,7 +216,7 @@ type predictionReadFunc func([]byte) (int, error)
 func (f predictionReadFunc) Read(p []byte) (int, error) { return f(p) }
 
 func TestPredictionCanceledQueryDoesNotCommitSuccessfulConfig(t *testing.T) {
-	state := newPredictionRuntime()
+	state := newTestPredictionRuntime()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	state.httpClient = &http.Client{Transport: predictionRoundTrip(func(req *http.Request) (*http.Response, error) {

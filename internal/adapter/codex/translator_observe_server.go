@@ -422,6 +422,9 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 
 	method, _ := message["method"].(string)
 	switch method {
+	case "turn/moderationMetadata":
+		t.observePredictionModeration(message)
+		return Result{}, nil
 	case "mcpServer/oauthLogin/completed":
 		if result, handled := t.observeMCPOAuthLoginCompleted(message); handled {
 			return result, nil

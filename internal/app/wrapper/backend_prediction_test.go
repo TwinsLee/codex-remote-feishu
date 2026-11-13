@@ -53,8 +53,13 @@ func predictionReply(t *testing.T, runtime *codexBackendRuntime, frame map[strin
 
 func TestPredictionPreparationUsesOfficialConfigAndOriginalThread(t *testing.T) {
 	runtime := newBackendRuntime(Config{Backend: agentproto.BackendCodex, InstanceID: "instance"}).(*codexBackendRuntime)
-	runtime.predictions = newPredictionRuntime()
+	runtime.predictions = newTestPredictionRuntime()
+	runtime.nativeUserAgent = "Codex Desktop/0.167.0-alpha.4.1 (Mac OS 26.7.2; arm64)"
+	runtime.predictions.desktopContext = func(context.Context, string) (map[string]any, error) { return map[string]any{"locale": "zh-CN"}, nil }
 	runtime.predictions.httpClient = &http.Client{Transport: predictionRoundTrip(func(req *http.Request) (*http.Response, error) {
+		if strings.HasSuffix(req.URL.Path, "/statsig/bootstrap") {
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(controlsPayload("user", "account")))}, nil
+		}
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"is_enabled":true,"prompt":"official dynamic prompt","prompt_version":"5","prediction_reasoning_effort":"high","live_sample_rate":1}`))}, nil
 	})}
 	frames := make(chan []byte, 16)
@@ -94,12 +99,21 @@ func TestPredictionPreparationUsesOfficialConfigAndOriginalThread(t *testing.T) 
 	predictionReply(t, runtime, resume, map[string]any{"modelProvider": "openai", "model": "gpt-supported", "reasoningEffort": "low", "collaborationMode": map[string]any{"mode": "default"}})
 	sample := predictionFrame(t, frames)
 	params := sample["params"].(map[string]any)
-	if sample["method"] != "thread/sample" || !strings.HasPrefix(params["prompt"].(string), "official dynamic prompt\n\nReturn only JSON matching this schema: ") || params["effort"] != "high" || params["threadId"] != "thread" || params["expectedTurnId"] != "turn" || params["interruptOnCancel"] != nil {
+	if sample["method"] != "thread/sample" || !strings.HasPrefix(params["prompt"].(string), "official dynamic prompt\n\nReturn only JSON matching this schema: ") || params["effort"] != "high" || params["threadId"] != "thread" || params["expectedTurnId"] != "turn" || params["interruptOnCancel"] != true {
 		t.Fatalf("sample differs from official options: %#v", params)
 	}
 	if params["responsesapiClientMetadata"].(map[string]any)["prediction_trigger"] != "live" {
 		t.Fatal("not a live generation")
 	}
+	if _, err := runtime.ObserveServer([]byte(`{"method":"turn/moderationMetadata","params":{"threadId":"thread","turnId":"turn","metadata":{"prompt":{"provider":{"outputs":[{"results":[{"labels":["official-user-label"]}]}]}}}}}`)); err != nil {
+		t.Fatal(err)
+	}
+	response, _ := json.Marshal(map[string]any{"id": sample["id"], "result": map[string]any{"sourceTurnId": "turn", "text": `{"suggestion":"native suggestion"}`}})
+	observed, err := runtime.ObserveServer(response)
+	if err != nil || len(observed.Events) != 1 || observed.Events[0].Prediction.Suggestion != "" {
+		t.Fatalf("official source filter was not applied: %+v %v", observed, err)
+	}
+
 }
 
 func TestPredictionCancelDuringPreparationSuppressesLateAuth(t *testing.T) {
@@ -142,7 +156,7 @@ func TestPredictionPreparationFailureEndsRoundQuietly(t *testing.T) {
 
 func TestPredictionCancelNeverBlocksFullChildQueue(t *testing.T) {
 	runtime := newBackendRuntime(Config{Backend: agentproto.BackendCodex, InstanceID: "instance"}).(*codexBackendRuntime)
-	runtime.predictions = newPredictionRuntime()
+	runtime.predictions = newTestPredictionRuntime()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	command := predictionRequest()
@@ -168,7 +182,7 @@ func TestPredictionCancelNeverBlocksFullChildQueue(t *testing.T) {
 
 func TestPredictionDisconnectCancelsNativeSample(t *testing.T) {
 	runtime := newBackendRuntime(Config{Backend: agentproto.BackendCodex, InstanceID: "instance"}).(*codexBackendRuntime)
-	runtime.predictions = newPredictionRuntime()
+	runtime.predictions = newTestPredictionRuntime()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	command := predictionRequest()
@@ -228,7 +242,7 @@ func TestPredictionOfficialRefreshIsBoundToOriginalPrincipal(t *testing.T) {
 	for _, account := range []string{"account", "other-account"} {
 		t.Run(account, func(t *testing.T) {
 			runtime := newBackendRuntime(Config{Backend: agentproto.BackendCodex, InstanceID: "instance"}).(*codexBackendRuntime)
-			runtime.predictions = newPredictionRuntime()
+			runtime.predictions = newTestPredictionRuntime()
 			requests := 0
 			runtime.predictions.httpClient = &http.Client{Transport: predictionRoundTrip(func(req *http.Request) (*http.Response, error) {
 				requests++
@@ -264,7 +278,7 @@ func TestPredictionOfficialRefreshIsBoundToOriginalPrincipal(t *testing.T) {
 
 func TestPredictionAccountNotificationCancelsOnlyConfigAuthScope(t *testing.T) {
 	runtime := newBackendRuntime(Config{Backend: agentproto.BackendCodex, InstanceID: "instance"}).(*codexBackendRuntime)
-	runtime.predictions = newPredictionRuntime()
+	runtime.predictions = newTestPredictionRuntime()
 	started := make(chan struct{})
 	runtime.predictions.httpClient = &http.Client{Transport: predictionRoundTrip(func(req *http.Request) (*http.Response, error) {
 		close(started)
@@ -299,7 +313,7 @@ func TestPredictionAccountNotificationCancelsOnlyConfigAuthScope(t *testing.T) {
 
 func TestPredictionAccountNotificationDoesNotCancelSampleScope(t *testing.T) {
 	runtime := newBackendRuntime(Config{Backend: agentproto.BackendCodex, InstanceID: "instance"}).(*codexBackendRuntime)
-	runtime.predictions = newPredictionRuntime()
+	runtime.predictions = newTestPredictionRuntime()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	command := predictionRequest()
@@ -340,7 +354,7 @@ func (c *predictionScopeProbeContext) Done() <-chan struct{} { c.derived++; retu
 
 func TestPredictionCachedConfigDoesNotCreateBackendAuthScope(t *testing.T) {
 	runtime := newBackendRuntime(Config{Backend: agentproto.BackendCodex, InstanceID: "instance"}).(*codexBackendRuntime)
-	runtime.predictions = newPredictionRuntime()
+	runtime.predictions = newTestPredictionRuntime()
 	runtime.predictions.cache["user\x00account"] = predictionConfigCache{config: predictionConfig{Enabled: true, Prompt: "cached official prompt"}, expires: time.Now().Add(time.Minute)}
 	ctx := &predictionScopeProbeContext{Context: context.Background()}
 	job := &predictionJob{ctx: ctx, command: predictionRequest()}
@@ -362,7 +376,7 @@ func TestPredictionEligibilityUsesResumedThreadAndOfficialModelList(t *testing.T
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			runtime := newBackendRuntime(Config{Backend: agentproto.BackendCodex, InstanceID: "instance"}).(*codexBackendRuntime)
-			runtime.predictions = newPredictionRuntime()
+			runtime.predictions = newTestPredictionRuntime()
 			runtime.predictions.httpClient = &http.Client{Transport: predictionRoundTrip(func(req *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"is_enabled":true,"prompt":"official","prompt_version":"5","prediction_reasoning_effort":"",` + tc.config + `}`))}, nil
 			})}

@@ -140,6 +140,9 @@ func (t *Translator) observePredictionResponse(requestID string, message map[str
 				event.ErrorMessage = err.Error()
 			} else {
 				event.Prediction.Suggestion = suggestion
+				if t.suppressPredictionByModeration(pending.ThreadID, pending.SourceTurnID) {
+					event.Prediction.Suggestion = ""
+				}
 			}
 		}
 	}

@@ -1,6 +1,7 @@
 package wrapper
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -210,6 +211,21 @@ func (p *predictionRuntime) fetchConfigWithAuthScope(queryCtx, ctx context.Conte
 			_ = p.cacheConfig(queryCtx, identity, predictionConfig{})
 		}
 	}()
+	raw, err := p.predictionBackendRequest(ctx, token, identity, routing, http.MethodGet, "/wham/predictions/config", nil)
+	if err != nil {
+		return predictionConfig{}, err
+	}
+	config, err = parsePredictionConfig(raw)
+	if err != nil {
+		return predictionConfig{}, err
+	}
+	if err = p.cacheConfig(queryCtx, identity, config); err != nil {
+		return predictionConfig{}, err
+	}
+	return config, nil
+}
+
+func (p *predictionRuntime) predictionBackendRequest(ctx context.Context, token string, identity predictionIdentity, routing predictionRouting, method, path string, body []byte) ([]byte, error) {
 	base := strings.TrimRight(strings.TrimSpace(os.Getenv("CODEX_API_BASE_URL")), "/")
 	if base == "" {
 		base = "https://chatgpt.com/backend-api"
@@ -217,18 +233,21 @@ func (p *predictionRuntime) fetchConfigWithAuthScope(queryCtx, ctx context.Conte
 			base = "http://localhost:8000/api"
 		}
 	}
-	endpoint, err := url.Parse(base + "/wham/predictions/config")
+	endpoint, err := url.Parse(base + path)
 	if err != nil {
-		return predictionConfig{}, errors.New("invalid prediction API base")
+		return nil, errors.New("invalid prediction API base")
 	}
 	origin, err := url.Parse(routing.BackendOrigin)
 	if err != nil {
-		return predictionConfig{}, errors.New("invalid native prediction origin")
+		return nil, errors.New("invalid native prediction origin")
 	}
 	endpoint.Scheme, endpoint.Host, endpoint.User = origin.Scheme, origin.Host, nil
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	request, err := http.NewRequestWithContext(ctx, method, endpoint.String(), bytes.NewReader(body))
 	if err != nil {
-		return predictionConfig{}, errors.New("invalid prediction config request")
+		return nil, errors.New("invalid prediction config request")
+	}
+	if len(body) > 0 {
+		request.Header.Set("Content-Type", "application/json")
 	}
 	request.Header.Set("Authorization", "Bearer "+token)
 	request.Header.Set("ChatGPT-Account-Id", routing.ChatGPTAccountID)
@@ -244,27 +263,20 @@ func (p *predictionRuntime) fetchConfigWithAuthScope(queryCtx, ctx context.Conte
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	response, err := client.Do(request)
 	if err != nil {
-		return predictionConfig{}, errors.New("official prediction config request failed")
+		return nil, errors.New("official prediction config request failed")
 	}
 	defer response.Body.Close()
 	if response.StatusCode == http.StatusUnauthorized {
-		return predictionConfig{}, errPredictionConfigUnauthorized
+		return nil, errPredictionConfigUnauthorized
 	}
 	if response.StatusCode != http.StatusOK {
-		return predictionConfig{}, errors.New("official prediction config unavailable")
+		return nil, errors.New("official prediction config unavailable")
 	}
 	raw, err := io.ReadAll(response.Body)
 	if err != nil {
-		return predictionConfig{}, errors.New("official prediction config read failed")
+		return nil, errors.New("official prediction config read failed")
 	}
-	config, err = parsePredictionConfig(raw)
-	if err != nil {
-		return predictionConfig{}, err
-	}
-	if err = p.cacheConfig(queryCtx, identity, config); err != nil {
-		return predictionConfig{}, err
-	}
-	return config, nil
+	return raw, nil
 }
 
 func (p *predictionRuntime) cacheConfig(ctx context.Context, identity predictionIdentity, config predictionConfig) error {
@@ -278,12 +290,14 @@ func (p *predictionRuntime) cacheConfig(ctx context.Context, identity prediction
 }
 
 type predictionRuntime struct {
-	jobs       map[string]*predictionJob
-	pending    map[string]chan predictionRPCResponse
-	sequence   uint64
-	configMu   sync.Mutex
-	cache      map[string]predictionConfigCache
-	httpClient *http.Client
-	now        func() time.Time
-	sample     func() float64
+	jobs           map[string]*predictionJob
+	pending        map[string]chan predictionRPCResponse
+	sequence       uint64
+	configMu       sync.Mutex
+	cache          map[string]predictionConfigCache
+	controls       map[string]predictionControls
+	httpClient     *http.Client
+	now            func() time.Time
+	sample         func() float64
+	desktopContext func(context.Context, string) (map[string]any, error)
 }

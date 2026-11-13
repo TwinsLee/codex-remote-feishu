@@ -664,7 +664,9 @@ wrapper 使用当前 native 的 `getAuthStatus`、`account/read` 与 `configRequ
 
 translator 把准备后的 request 译为 `thread/sample`，prompt 为官方正文追加桌面原样的 nullable suggestion JSON schema 后缀；携带 `threadId`、`expectedTurnId`、effort、`threadSource=turnTrigger=composer_predictions`、`disableMcp=true` 与原生 source/turn/trigger metadata。解析与桌面相同：suggestion 可为 string/null，字符串 trim，额外 JSON 属性忽略，不另加中文或 200 字限制。取消译为 `thread/sample/cancel {requestId: 原采样 RPC id}`。RPC id 与原 command 的关联只由 translator 自己的 pending map 持有；只消费自己拥有的采样和取消响应，取消后的迟到结果丢弃，其他原生请求/响应继续透传。这条路径不创建或切换会话，不发送普通 turn，也不改 translator 的 `currentThreadID` 或普通 turn 模板。
 
-采样要求 native source 已加载、是持久化根线程，且 `expectedTurnId` 仍为最新已结束轮次；不通过普通 fork/turn 或工具调用作兼容降级。`disableMcp` 不是“关闭所有工具”的承诺；无文本、工具尝试或无有效 suggestion 时不展示建议。原生 30 秒超时及取消关联保留；`interruptOnCancel` 只有桌面特性开关和版本同时支持才开启，Remote 未取得该开关时不自行开启。官方提示词与参数的移植不代表已搬运桌面 Statsig moderation policy、灰度开关或 catch-up/new-thread 预测；不自造相应阈值或策略。传输与草稿保护不替代原生产品的这些控制。
+采样要求 native source 已加载、是持久化根线程，且 `expectedTurnId` 仍为最新已结束轮次；不通过普通 fork/turn 或工具调用作兼容降级。`disableMcp` 不是“关闭所有工具”的承诺；无文本、工具尝试或无有效 suggestion 时不展示建议。原生 30 秒超时及取消关联保留；`interruptOnCancel` 仅在官方 `codex-app-cumberbatch-interrupt-on-cancel` 为 true 且 native CLI >= `0.167.0-alpha.1` 时开启。macOS wrapper 从已安装桌面读取版本、安装标识、语言等上下文，以当前 native 账号向桌面同源 `/wham/statsig/bootstrap` 获取开关与 `codex-app-cumberbatch-mod-policy`，校验返回的 user/account。开关与 policy 只按 principal 留在当前进程内存；进程重启后的首次预测重新获取，暂不添加运行期轮询；提示词的桌面 5 分钟缓存仍保留。取不到有效配置时不自行开启取消开关，也不添加本地过滤。
+
+translator 按桌面算法缓存源 `turn/moderationMetadata`（最多 64 个源 thread/turn），在采样完成时用当前官方 policy 检查源轮次的 prompt 分数/标签及 generation 标签；命中则返回空建议。只使用官方下发的 `st`、`ubl`、`abl`，不对建议文本另行分类或改写；无效 policy 或 metadata 不追加过滤。桌面 beta 偏好与企业策略未独立复刻，上下文请求省略无法证实的 beta 可选字段。这里是同源官方配置获取与 live 后台逻辑移植，不能据此声明桌面 SDK 内存配置逐时同步，catch-up/new-thread 入口仍未接入。
 
 ### 5.4.4 Capability / account / app / MCP status state
 

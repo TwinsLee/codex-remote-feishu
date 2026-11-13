@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-11-13`
-> Summary: Goal 修改卡片新增一次性操作标识，绑定原目标的 Goal 快照与状态，保留现有异步问题卡和桌面交接。
+> Summary: Goal 修改卡片新增一次性操作标识，绑定原目标的 Goal 快照与状态，保留现有异步问题卡和桌面交接，并补充 Predictions 建议与编辑草稿的 freshness 边界。
 
 ## 1. 文档定位
 
@@ -846,6 +846,14 @@ MCP request 卡片当前新增的可视语义：
 `GatewayID` 是可复用配置槽位，不足以证明 callback 仍属于当前机器人。AppID 替换或配置删除时，controller 会先关闭旧 gateway generation 的 action gate、取消事件源，并等待已经进入统一 action handler 的 callback 排空；只有此后 daemon 才写入 pending identity transition、撤销旧 surface 与 UI/card runtime、提交新的 bot identity generation 并启动新 runtime。
 
 因此新 App 不会沿用同一 GatewayID 下旧机器人的 surface owner、card owner 或 callback runtime。旧 generation 在 gate 关闭后到达的 callback 会被拒绝进入业务 handler；已经进入的 callback 会先完成，再由 identity transition 统一清理其结果。pending transition 会在 durable 清理或 identity commit 失败时保留不可撤回的清理栅栏，后续即使配置改回旧 AppID，也必须先清掉旧 generation 的 card owner；`/bendtomywill` 的 turn patch flow/transaction 也属于这组 card runtime，不能在新 bot identity 下继续投递。这个边界与 `daemon_lifecycle_id` 互补：前者隔离同一 daemon 内的 bot identity 代次，后者隔离 daemon 重启代次。
+
+### 6.5 Predictions 建议与编辑草稿的 freshness
+
+Predictions 通过独立的“下一句建议”页面展示单条建议；“采用并编辑”使用 `page_local_action`，只打开独立编辑表单；表单默认填入建议，用户可修改，“发送”使用 `page_local_submit` 才进入普通输入路径。两种动作都在 callback 的 `request_id` 携带原采样 command ID，gateway 还原为 `PredictionID`；该 ID 不是上游待答问题的 request，也不代表已经发送消息。
+
+daemon 的通用卡片 freshness 之外，orchestrator 还按原用户、surface、instance、thread、源 turn 与当前易失记录校验采用和发送。新输入、原生新轮次、焦点或选中目标变化、断线、采样超时及草稿过期都会使旧记录失效；跨用户、重复或旧上下文回调只能被拒绝，不能改投当前 thread。采样结果等待上限为 30 秒，超时本地失效并尽力取消，不保证上游推理立即停止或零额外费用；建议与草稿从请求创建起最多保留 10 分钟；重启后旧卡没有可恢复的服务端记录。飞书聊天输入框不会被写入，也不依赖正在输入事件或原生 Tab 键。
+
+独立表单不覆盖普通草稿载体。编辑提交绑定原 queue item 与实际 command，排队或派发期间拒绝重复提交；校验拒绝、派发失败及 wrapper 显式拒绝时，在原 `MessageID` 上保留用户编辑内容供手动重试，不自动重发。其他命令失败及已因新输入、切换或过期而失效的记录不能复活草稿。原生 `RuntimeStatus=active` 及 active 快照也会拦截旧建议，恢复 idle 不会恢复已失效记录。这些行为已有本地回归，真实模型表现仍未验证。核心生命周期见 [remote surface 4.19](./remote-surface-state-machine.md#419-predictions-是绑定原上下文的易失建议不是新的执行队列)。
 
 ## 7. 当前回归基线
 

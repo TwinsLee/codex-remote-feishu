@@ -19,6 +19,9 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 
 	if id, ok := message["id"]; ok {
 		requestID := fmt.Sprint(id)
+		if result, handled := t.observePredictionResponse(requestID, message); handled {
+			return result, nil
+		}
 		if result, handled := t.observeModelListResponse(requestID, message); handled {
 			return result, nil
 		}

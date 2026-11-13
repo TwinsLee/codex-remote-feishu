@@ -222,6 +222,7 @@ func (s *Service) enqueuePreparedQueueItem(surface *state.SurfaceConsoleRecord, 
 		item.ReplyToMessagePreview = item.SourceMessagePreview
 	}
 	surface.QueueItems[item.ID] = item
+	s.bindPredictionQueueItem(surface, item)
 	if front {
 		surface.QueuedQueueItemIDs = append([]string{item.ID}, surface.QueuedQueueItemIDs...)
 	} else {

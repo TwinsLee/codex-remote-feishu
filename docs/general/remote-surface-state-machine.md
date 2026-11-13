@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-11-13`
-> Summary: 整合工作区根目录解析、私有更新锁原子发布，以及 Goal 卡片一次性操作保护。
+> Summary: 整合工作区根目录解析、私有更新锁原子发布、Goal 卡片一次性操作保护，以及 Predictions 易失状态与失效边界。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -1256,6 +1256,20 @@ Codex 名称投影：SQLite catalog 兼容读取可选 `name` 列，显式名称
    1. patch 与 rollback 成功后，后续输入会继续落在同一 thread。
    2. 已经发出去的旧消息不会被回改；patch 只影响后续上下文。
    3. 成功页会保留最近一次 rollback 按钮；失败页不会留下半活跃事务。
+
+### 4.19 Predictions 是绑定原上下文的易失建议，不是新的执行队列
+
+当前实现以每个 surface 一条内存记录保存 Predictions，daemon 重启不恢复。记录绑定用户、surface、原实例、thread、源 turn 和采样 command ID；重复完成事件不会为同一源轮次再次生成建议。状态依次为采样中、可采用、编辑草稿，失效后不再接受旧结果或动作。
+
+触发入口仅限 headless Codex 中来自用户普通输入、成功完成且无错误的根会话轮次。wrapper 必须显式声明 `threadPrediction`，实例在线且无活动 turn；surface 必须仍选中原实例和 thread，无待启动实例、活动或排队输入、待答请求及未提交的异步问题，thread 不能是 fork、review 或其他辅助线程，也不能有 active Goal。不能只凭 wrapper 能力声明推断 CLI 已支持 `thread/sample`；不支持时按 [协议合同 5.4.3.2](./relay-protocol-spec.md#5432-predictions-旁路采样合同) 在本连接内停采并提示一次。
+
+采样结果最多等待 30 秒，超时后本地失效并尽力向原实例取消；为兼容较早版本而省略 `interruptOnCancel`，尚未验证实际推理何时停止，不保证立即停止或零额外费用。建议和编辑草稿从请求创建起最多保留 10 分钟，采用不会重新计时。daemon 收到新输入、原生轮次开始、焦点变化、当前目标切换或实例断线时，原建议失效；pending 采样向原实例发送取消，迟到成功也不能复活旧记录。结果、采用和发送均重新核对上述绑定、当前空闲条件及有效期；不能把上一轮建议转投到新 thread，也不能让跨用户、重复或旧轮次回调启动任务。
+
+“采用并编辑”只打开以建议为默认值的独立表单，不入普通执行队列。用户可修改文本；点击“发送”才作为普通 `ActionTextMessage` 进入现有输入门禁和 dispatch，保持与手工输入相同的目标、队列和权限规则。这里的新输入指 daemon 已收到的消息或动作，不承诺监听飞书正在输入事件，也没有原生 Tab 接受行为。
+
+Predictions 使用独立表单与易失编辑内容，不覆盖普通草稿载体。发送时以原 queue item 和实际派发 command 关联，排队或发送中拒绝重复提交；输入校验拒绝、派发失败或 wrapper 显式拒绝会在原卡保留编辑内容，允许用户重试，不自动重发。新输入、目标变化、过期及其他命令失败都不能恢复旧草稿。这些行为已通过本地回归。
+
+原生 `RuntimeStatus=active` 即使没有 `TurnStarted` 也会使旧建议永久失效，后来恢复 idle 不能复活；active 快照同样阻止结果展示和采用。如果完成事件先于 idle 更新，本轮保守跳过建议，不新增等待或自动重试状态。上述本地回归不代表真实模型建议质量、时延或费用已经验证。
 
 ## 5. 主要状态迁移
 

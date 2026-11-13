@@ -275,6 +275,7 @@ func (r *codexBackendRuntime) Backend() agentproto.Backend {
 func (r *codexBackendRuntime) Capabilities() agentproto.Capabilities {
 	capabilities := agentproto.DefaultCapabilitiesForBackend(agentproto.BackendCodex)
 	capabilities.ModelCatalog = true
+	capabilities.ThreadPrediction = true
 	return capabilities
 }
 

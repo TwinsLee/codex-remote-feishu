@@ -27,14 +27,21 @@ func predictionSuggestionPage(p *predictionRecord) control.FeishuPageView {
 
 func predictionDraftPage(p *predictionRecord) control.FeishuPageView {
 	text := p.Suggestion
-	if p.EditedText != "" {
+	if p.Draft {
 		text = p.EditedText
 	}
 	return control.FeishuPageView{PageID: "prediction", Title: "编辑下一条消息", Interactive: true, MessageID: p.MessageID,
 		StatusText: "确认内容后点击发送。",
 		Sections: []control.CommandCatalogSection{{Entries: []control.CommandCatalogEntry{{Form: &control.CommandCatalogForm{
 			SubmitLabel: "发送", SubmitValue: predictionPayload(p, true),
-			Field: control.CommandCatalogFormField{Name: "prediction_text", Kind: control.CommandCatalogFormFieldText,
+			Field: control.CommandCatalogFormField{Name: "prediction_text", Kind: control.CommandCatalogFormFieldMultilineText,
 				Label: "消息内容", DefaultValue: text},
 		}}}}}, SuppressDefaultRelatedButtons: true}
+}
+
+func predictionDraftCallbackPage(p *predictionRecord) control.FeishuPageView {
+	view := predictionDraftPage(p)
+	// Replace through the callback; retain the record message ID for asynchronous failures.
+	view.MessageID = ""
+	return view
 }

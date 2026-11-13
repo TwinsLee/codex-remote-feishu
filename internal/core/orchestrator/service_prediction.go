@@ -217,16 +217,22 @@ func (s *Service) handlePredictionAction(surface *state.SurfaceConsoleRecord, ac
 		return notice(surface, "prediction_submitting", "这条消息已在排队或发送中，请等待结果。")
 	}
 	if action.Kind == control.ActionPredictionAccept {
+		if !p.Draft {
+			p.EditedText = p.Suggestion
+		}
 		p.Draft = true
 		p.MessageID = action.MessageID
-		return []eventcontract.Event{s.pageEvent(surface, predictionDraftPage(p))}
+		return []eventcontract.Event{s.pageEvent(surface, predictionDraftCallbackPage(p))}
 	}
 	if !p.Draft {
 		return notice(surface, "prediction_not_adopted", "请先采用建议并编辑，再点击发送。")
 	}
 	text := strings.TrimSpace(action.Text)
 	if text == "" {
-		return notice(surface, "prediction_empty", "请输入要发送的内容。")
+		p.EditedText, p.MessageID = "", action.MessageID
+		view := predictionDraftCallbackPage(p)
+		view.StatusText = "请输入要发送的内容。"
+		return []eventcontract.Event{s.pageEvent(surface, view)}
 	}
 	p.EditedText, p.MessageID, p.Submitting = text, action.MessageID, true
 	action.Kind = control.ActionTextMessage
@@ -237,7 +243,7 @@ func (s *Service) handlePredictionAction(surface *state.SurfaceConsoleRecord, ac
 	if p.SendQueueItemID == "" {
 		p.Submitting = false
 		if s.predictionTargetCurrent(p) {
-			events = append(events, s.pageEvent(surface, predictionDraftPage(p)))
+			events = append([]eventcontract.Event{s.pageEvent(surface, predictionDraftCallbackPage(p))}, events...)
 		}
 	}
 	return events

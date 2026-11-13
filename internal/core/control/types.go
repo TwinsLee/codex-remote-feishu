@@ -461,8 +461,9 @@ const (
 type CommandCatalogFormFieldKind string
 
 const (
-	CommandCatalogFormFieldText         CommandCatalogFormFieldKind = "text"
-	CommandCatalogFormFieldSelectStatic CommandCatalogFormFieldKind = "select_static"
+	CommandCatalogFormFieldText          CommandCatalogFormFieldKind = "text"
+	CommandCatalogFormFieldMultilineText CommandCatalogFormFieldKind = "multiline_text"
+	CommandCatalogFormFieldSelectStatic  CommandCatalogFormFieldKind = "select_static"
 )
 
 type CommandCatalogDisplayStyle string

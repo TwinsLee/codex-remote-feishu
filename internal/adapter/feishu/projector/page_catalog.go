@@ -366,6 +366,9 @@ func commandCatalogFormFieldElement(field control.CommandCatalogFormField) map[s
 			element["initial_option"] = value
 		}
 	default:
+		if field.Kind == control.CommandCatalogFormFieldMultilineText {
+			element["input_type"] = "multiline_text"
+		}
 		if label := strings.TrimSpace(field.Label); label != "" {
 			element["label"] = map[string]any{
 				"tag":     "plain_text",

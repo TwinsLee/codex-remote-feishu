@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-11-16`
-> Summary: 异步提问卡在正文完整列出编号选项，使用短按钮选择，避免移动端按钮省略文字影响判断。
+> Summary: 下拉选择控件填满所在容器；异步提问卡在正文完整列出编号选项，使用短按钮选择。
 
 ## 1. 文档定位
 
@@ -195,6 +195,8 @@ Goal 当前的回显约束：
   - VS Code thread dropdown 当前会直接隐藏 disabled thread，并用 plain-text hint 提示“已省略当前不可切换的会话”
   - VS Code `/use` / `/useall` 的大候选集不再整包塞进单个 `select_static`；projector 会按 Feishu transport byte budget 做动态分页，并通过 `thread_selection_page(view_mode + cursor)` 同卡翻页
   - 若当前 thread 不在当前 dropdown 可见页，projector 不会再给 `select_static` 写 `initial_option`
+- 下拉选择控件的展示宽度：history、path/thread picker、command/config 表单与 request 结构化表单的 `select_static` / `multi_select_static` 均显式使用 `width=fill`，填满所在容器；已有 target picker 的铺满行为保留，侧边翻页按钮与列布局不变。
+  - 选项文本、value、初始选择、callback 与提交语义不变；byte-budget 分页算法不变，新增宽度字段计入原有容量预算，因此临近容量边界时单页可容纳的选项数可能减少。
 - `control.FeishuDirectSelectionPrompt` 仍然保留，但当前只剩测试 / mockfeishu 兼容用途，不再是 live adapter 输入：
   - workspace/thread selection live 路径已经不再从 `FeishuSelectionView` 回退投影成 `FeishuDirectSelectionPrompt`
   - kick-thread confirm 等 live selection 也直接消费 `FeishuSelectionView`

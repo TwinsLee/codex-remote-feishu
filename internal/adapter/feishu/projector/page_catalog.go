@@ -356,6 +356,7 @@ func commandCatalogFormFieldElement(field control.CommandCatalogFormField) map[s
 	switch field.Kind {
 	case control.CommandCatalogFormFieldSelectStatic:
 		element["tag"] = "select_static"
+		element["width"] = "fill"
 		if placeholder := strings.TrimSpace(field.Placeholder); placeholder != "" {
 			element["placeholder"] = cardkit.PlainText(placeholder)
 		}

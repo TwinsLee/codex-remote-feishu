@@ -406,6 +406,7 @@ func measurePaginatedSelectPage(measure paginatedSelectMeasure, page paginatedSe
 func selectStaticElement(name, placeholder string, payload map[string]any, options []map[string]any, initialOption string) map[string]any {
 	element := map[string]any{
 		"tag":         "select_static",
+		"width":       "fill",
 		"name":        strings.TrimSpace(name),
 		"placeholder": cardkit.PlainText(placeholder),
 		"options":     cardkit.CloneAny(options),

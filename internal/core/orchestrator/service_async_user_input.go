@@ -113,14 +113,16 @@ func asyncUserInputPageEvent(surface *state.SurfaceConsoleRecord, record *asyncU
 		view.Interactive = false
 	} else {
 		question := record.Questions[len(record.Answers)]
-		view.BodySections = append(view.BodySections, control.FeishuCardTextSection{Label: fmt.Sprintf("问题 %d/%d", len(record.Answers)+1, len(record.Questions)), Lines: []string{question.Title}})
+		questionLines := []string{question.Title}
 		entry := control.CommandCatalogEntry{}
 		for i, option := range question.Options {
+			questionLines = append(questionLines, fmt.Sprintf("%d. %s", i+1, option))
 			entry.Buttons = append(entry.Buttons, control.CommandCatalogButton{
-				Label: option, Kind: control.CommandCatalogButtonCallbackAction,
+				Label: fmt.Sprintf("选 %d", i+1), Kind: control.CommandCatalogButtonCallbackAction,
 				CallbackValue: asyncUserInputPayload(record, strconv.Itoa(i)),
 			})
 		}
+		view.BodySections = append(view.BodySections, control.FeishuCardTextSection{Label: fmt.Sprintf("问题 %d/%d", len(record.Answers)+1, len(record.Questions)), Lines: questionLines})
 		entry.Form = &control.CommandCatalogForm{
 			SubmitLabel: "提交回答", SubmitValue: asyncUserInputPayload(record, ""),
 			Field: control.CommandCatalogFormField{Name: "answer", Kind: control.CommandCatalogFormFieldText, Label: "补充或其他回答", Placeholder: "输入回答"},

@@ -103,6 +103,7 @@ func asyncUserInputPageEvent(surface *state.SurfaceConsoleRecord, record *asyncU
 	view := control.FeishuPageView{
 		PageID: "async_user_input", Title: "请回答", ThemeKey: record.ThreadID,
 		Interactive: true, Patchable: true, MessageID: messageID,
+		DisplayStyle:                  control.CommandCatalogDisplayDefault,
 		SuppressDefaultRelatedButtons: true,
 	}
 	for i, answer := range record.Answers {
@@ -113,16 +114,16 @@ func asyncUserInputPageEvent(surface *state.SurfaceConsoleRecord, record *asyncU
 		view.Interactive = false
 	} else {
 		question := record.Questions[len(record.Answers)]
-		optionLines := []string{}
+		questionLines := []string{strings.TrimSpace(question.Title)}
 		entry := control.CommandCatalogEntry{}
 		for i, option := range question.Options {
-			optionLines = append(optionLines, strings.TrimSpace(fmt.Sprintf("%d. %s", i+1, option)))
+			questionLines = append(questionLines, strings.TrimSpace(fmt.Sprintf("%d. %s", i+1, option)))
 			entry.Buttons = append(entry.Buttons, control.CommandCatalogButton{
 				Label: fmt.Sprintf("选 %d", i+1), Kind: control.CommandCatalogButtonCallbackAction,
 				CallbackValue: asyncUserInputPayload(record, strconv.Itoa(i)),
 			})
 		}
-		view.BodySections = append(view.BodySections, control.FeishuCardTextSection{Label: fmt.Sprintf("问题 %d/%d", len(record.Answers)+1, len(record.Questions)), Lines: []string{question.Title, strings.Join(optionLines, "\n\n")}})
+		view.BodySections = append(view.BodySections, control.FeishuCardTextSection{Label: fmt.Sprintf("问题 %d/%d", len(record.Answers)+1, len(record.Questions)), Lines: []string{strings.Join(questionLines, "\n\n")}})
 		entry.Form = &control.CommandCatalogForm{
 			SubmitLabel: "提交回答", SubmitValue: asyncUserInputPayload(record, ""),
 			Field: control.CommandCatalogFormField{Name: "answer", Kind: control.CommandCatalogFormFieldText, Label: "补充或其他回答", Placeholder: "输入回答"},

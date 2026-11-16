@@ -71,8 +71,32 @@ func TestAsyncUserInputNativeMessageCardCallbackRoundTrip(t *testing.T) {
 				}
 			}
 			questionBody := strings.Join(bodyParts, "\n")
-			if !strings.Contains(questionBody, "1. "+firstOption+"\n\n2. "+secondOption) {
-				t.Fatalf("question body must separate complete numbered options with a blank line, got %q", questionBody)
+			if !strings.Contains(questionBody, question+"\n\n1. "+firstOption+"\n\n2. "+secondOption) {
+				t.Errorf("question body must separate the title and complete numbered options with blank lines, got %q", questionBody)
+			}
+			var optionGroup, answerInput map[string]any
+			for _, element := range elements {
+				if element["tag"] == "column_set" {
+					optionGroup = element
+				}
+				if element["tag"] == "form" {
+					fields, _ := element["elements"].([]map[string]any)
+					if len(fields) != 0 {
+						answerInput = fields[0]
+					}
+				}
+			}
+			columns, _ := optionGroup["columns"].([]map[string]any)
+			if optionGroup["flex_mode"] != "flow" || len(columns) != 2 {
+				t.Errorf("short option buttons must share a wrapping row, got %#v", optionGroup)
+			}
+			for _, column := range columns {
+				if column["width"] != "auto" {
+					t.Errorf("option buttons must keep natural width on narrow screens, got %#v", column)
+				}
+			}
+			if answerInput["tag"] != "input" || answerInput["name"] != "answer" || answerInput["width"] != "fill" || answerInput["label_position"] != "top" || answerInput["input_type"] != nil {
+				t.Errorf("answer must remain a single-line input with a top label and adaptive width, got %#v", answerInput)
 			}
 			labels := map[string]string{}
 			for _, button := range cardActionsFromElements(elements) {

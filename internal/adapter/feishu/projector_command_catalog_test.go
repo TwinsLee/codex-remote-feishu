@@ -97,6 +97,9 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *tes
 	if len(renderedFormElements) != 2 {
 		t.Fatalf("expected rendered V2 form to keep input and submit button, got %#v", renderedElements[3])
 	}
+	if input := renderedFormElements[0]; input["label_position"] != "left" || input["width"] != nil || input["input_type"] != nil {
+		t.Fatalf("ordinary command input must keep its existing layout and type, got %#v", input)
+	}
 	if renderedFormElements[1]["action_type"] != nil || renderedFormElements[1]["form_action_type"] != "submit" {
 		t.Fatalf("expected command form submit button to use V2 form_action_type, got %#v", renderedFormElements[1])
 	}

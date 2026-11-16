@@ -65,7 +65,7 @@ func PageElementsWithOptions(view control.FeishuPageView, daemonLifecycleID stri
 				}
 			}
 			if view.Interactive && entry.Form != nil {
-				if formElements := pageFormElements(*entry.Form, view.CatalogBackend, daemonLifecycleID); len(formElements) != 0 {
+				if formElements := pageFormElements(*entry.Form, view.CatalogBackend, daemonLifecycleID, view.PageID == "async_user_input"); len(formElements) != 0 {
 					elements = append(elements, formElements...)
 				}
 			}
@@ -84,7 +84,7 @@ func PageElementsWithOptions(view control.FeishuPageView, daemonLifecycleID stri
 	return elements
 }
 
-func pageFormElements(form control.CommandCatalogForm, pageBackend controlBackend, daemonLifecycleID string) []map[string]any {
+func pageFormElements(form control.CommandCatalogForm, pageBackend controlBackend, daemonLifecycleID string, stackedInput bool) []map[string]any {
 	field := form.Field
 	formName := commandCatalogFormName(form)
 	submitValue := cloneActionPayload(form.SubmitValue)
@@ -115,11 +115,16 @@ func pageFormElements(form control.CommandCatalogForm, pageBackend controlBacken
 		submitButton["name"] = commandCatalogSubmitButtonName(formName)
 	}
 	field = paginatedCommandCatalogFormField(field, form)
+	fieldElement := commandCatalogFormFieldElement(field)
+	if stackedInput {
+		fieldElement["width"] = "fill"
+		fieldElement["label_position"] = "top"
+	}
 	elements := []map[string]any{{
 		"tag":  "form",
 		"name": formName,
 		"elements": []map[string]any{
-			commandCatalogFormFieldElement(field),
+			fieldElement,
 			submitButton,
 		},
 	}}

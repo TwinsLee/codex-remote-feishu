@@ -79,22 +79,37 @@ func TestPredictionControlsMissingAndUnsupportedHash(t *testing.T) {
 	}
 }
 
-func TestPredictionInterruptRequiresDesktopVersionBoundary(t *testing.T) {
-	for _, test := range []struct {
-		version string
-		want    bool
-	}{
-		{"", false}, {"invalid", false}, {"0.166.9", false}, {"0.167.0-alpha.0", false}, {"0.167.0-alpha.1", true}, {"0.167.0-alpha.4.1", true}, {"0.167.0", true}, {"0.168.0-alpha.0", true},
+func TestPredictionInterruptRequiresKnownClientVersionBoundary(t *testing.T) {
+	for _, client := range []string{"Codex Desktop", "Codex Remote Headless"} {
+		for _, test := range []struct {
+			version string
+			want    bool
+		}{
+			{"", false}, {"invalid", false}, {"0.166.9", false}, {"0.167.0-alpha.0", false}, {"0.167.0-alpha.1", true}, {"0.167.0-alpha.4.1", true}, {"0.167.0", true}, {"0.168.0-alpha.0", true}, {"0.169.0-alpha.11.1", true},
+		} {
+			t.Run(client+"/"+test.version, func(t *testing.T) {
+				if got := predictionInterruptSupported(client + "/" + test.version + " (Mac OS 26.7.2; arm64)"); got != test.want {
+					t.Errorf("version %q got %t, want %t", test.version, got, test.want)
+				}
+			})
+		}
+	}
+}
+
+func TestPredictionInterruptRejectsUnknownClient(t *testing.T) {
+	for _, userAgent := range []string{
+		"", "0.169.0-alpha.11.1", "Codex CLI/0.169.0-alpha.11.1", "Codex Remote/0.169.0-alpha.11.1",
+		"Unknown/1.0.0", "Codex Remote Headless Extra/0.169.0-alpha.11.1", "Codex Desktop Extra/0.169.0-alpha.11.1",
 	} {
-		if got := predictionInterruptSupported("Codex Desktop/" + test.version + " (Mac OS 26.7.2; arm64)"); got != test.want {
-			t.Errorf("version %q got %t", test.version, got)
+		if predictionInterruptSupported(userAgent) {
+			t.Errorf("accepted unknown client %q", userAgent)
 		}
 	}
 }
 
 func TestPredictionInitializationRecordsNativeVersion(t *testing.T) {
 	r := &codexBackendRuntime{translator: codex.NewTranslator("instance")}
-	r.observePredictionInitialization([]byte(`{"id":"relay-bootstrap-initialize","result":{"userAgent":"Codex Desktop/0.167.0-alpha.4.1 (Mac OS 26.7.2; arm64)"}}`))
+	r.observePredictionInitialization([]byte(`{"id":"relay-bootstrap-initialize","result":{"userAgent":"Codex Remote Headless/0.169.0-alpha.11.1"}}`))
 	if !predictionInterruptSupported(r.nativeUserAgent) {
 		t.Fatal("headless initialization lost native version")
 	}

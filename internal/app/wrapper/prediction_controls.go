@@ -89,10 +89,11 @@ func (r *codexBackendRuntime) observePredictionInitialization(raw []byte) {
 }
 
 func predictionInterruptSupported(userAgent string) bool {
-	if !strings.HasPrefix(userAgent, "Codex Desktop/") {
+	client, versionInfo, ok := strings.Cut(userAgent, "/")
+	if !ok || (client != "Codex Desktop" && client != "Codex Remote Headless") {
 		return false
 	}
-	fields := strings.Fields(strings.TrimPrefix(userAgent, "Codex Desktop/"))
+	fields := strings.Fields(versionInfo)
 	if len(fields) == 0 {
 		return false
 	}

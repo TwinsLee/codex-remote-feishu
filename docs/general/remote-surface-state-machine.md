@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-11-13`
-> Summary: 整合工作区根目录解析、私有更新锁原子发布、Goal 卡片一次性操作保护，以及 Predictions 易失状态与失效边界。
+> Updated: `2026-11-16`
+> Summary: Predictions 提交回执与真实派发绑定；任务确认开始后不能恢复编辑发送入口。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -1267,7 +1267,9 @@ Codex 名称投影：SQLite catalog 兼容读取可选 `name` 列，显式名称
 
 “采用并编辑”只打开以建议为默认值的独立表单，不入普通执行队列。用户可修改文本；点击“发送”才作为普通 `ActionTextMessage` 进入现有输入门禁和 dispatch，保持与手工输入相同的目标、队列和权限规则。这里的新输入指 daemon 已收到的消息或动作，不承诺监听飞书正在输入事件，也没有原生 Tab 接受行为。
 
-Predictions 使用独立表单与易失编辑内容，不覆盖普通草稿载体。发送时以原 queue item 和实际派发 command 关联，排队或发送中拒绝重复提交；空提交保留空表单并提示输入；输入校验拒绝同步替换为保留编辑内容的原卡表单，校验提示独立追加；派发失败或 wrapper 显式拒绝才后台更新原卡。以上失败均允许用户修改后显式重试，不自动重发。新输入、目标变化、过期及其他命令失败都不能恢复旧草稿。这些行为已通过本地回归。
+Predictions 使用独立表单与易失编辑内容，不覆盖普通草稿载体。发送时以原 queue item 和实际派发 command 关联，排队或发送中拒绝重复提交；入队后先将原卡更新为保留完整正文的只读提交回执，确认原 command/queue item 对应的新轮次开始后更新为已发送；回执投递失败不回滚或重复派发正文。回执细节由 [Feishu UI 6.5](./feishu-card-ui-state-machine.md#65-predictions-建议与编辑草稿的-freshness) 维护。
+
+空提交保留空表单并提示输入；输入校验拒绝同步替换为保留编辑内容的原卡表单，校验提示独立追加；任务确认开始前的派发失败或 wrapper 显式拒绝才后台恢复原卡。以上失败均允许用户修改后显式重试，不自动重发；任务开始后的执行失败及迟到拒绝不能恢复发送入口。新输入、目标变化、过期及其他命令失败都不能恢复旧草稿。这些行为已通过本地回归。
 
 原生 `RuntimeStatus=active` 即使没有 `TurnStarted` 也会使旧建议永久失效，后来恢复 idle 不能复活；active 快照同样阻止结果展示和采用。如果完成事件先于 idle 更新，本轮保守跳过建议，不新增等待或自动重试状态。生成侧使用桌面官方动态配置和原生 sample 路径，不自行选择模型、改写提示词或调推理强度；配置取不到则无建议。内容侧另从桌面同源官方 bootstrap 获取取消开关与 moderation policy，按原生源轮次 metadata 执行官方过滤；执行门禁不代替内容过滤。开关和 policy 按当前进程及 principal 缓存，重启后的首次预测重新获取，不写入持久化文件、不增加刷新队列；缺失时保持桌面的无附加 policy 行为。
 

@@ -45,3 +45,14 @@ func predictionDraftCallbackPage(p *predictionRecord) control.FeishuPageView {
 	view.MessageID = ""
 	return view
 }
+
+func predictionSubmittedPage(p *predictionRecord, started bool) control.FeishuPageView {
+	status := "已提交，等待处理。"
+	if started {
+		status = "已发送，任务已开始处理。"
+	}
+	return control.FeishuPageView{PageID: "prediction", Title: "已提交的消息", MessageID: p.MessageID,
+		StatusText:                    status,
+		SummarySections:               []control.FeishuCardTextSection{{Lines: []string{p.EditedText}}},
+		SuppressDefaultRelatedButtons: true}
+}

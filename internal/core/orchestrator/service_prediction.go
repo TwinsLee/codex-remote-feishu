@@ -104,7 +104,9 @@ func (s *Service) invalidatePrediction(p *predictionRecord) []eventcontract.Even
 	}
 	p.Canceled = true
 	p.Suggestion = ""
-	p.EditedText = ""
+	if !p.Submitting {
+		p.EditedText = ""
+	}
 	if !p.Pending {
 		return nil
 	}
@@ -144,10 +146,10 @@ func (s *Service) forgetInstancePredictions(instanceID string) {
 }
 
 func (s *Service) predictionEventPrelude(instanceID string, event agentproto.Event) []eventcontract.Event {
+	events := s.predictionSubmissionStarted(instanceID, event)
 	if event.Kind == agentproto.EventTurnStarted || event.Kind == agentproto.EventThreadFocused {
-		return s.invalidateInstancePredictions(instanceID)
+		return append(events, s.invalidateInstancePredictions(instanceID)...)
 	}
-	var events []eventcontract.Event
 	nativeActive := event.Kind == agentproto.EventThreadRuntimeStatusUpdated && event.RuntimeStatus != nil && event.RuntimeStatus.Type == agentproto.ThreadRuntimeStatusTypeActive
 	if event.Kind == agentproto.EventTurnCompleted || nativeActive {
 		for _, p := range s.predictions {
@@ -245,8 +247,33 @@ func (s *Service) handlePredictionAction(surface *state.SurfaceConsoleRecord, ac
 		if s.predictionTargetCurrent(p) {
 			events = append([]eventcontract.Event{s.pageEvent(surface, predictionDraftCallbackPage(p))}, events...)
 		}
+	} else {
+		// Patch before dispatch; an unchanged callback cannot overwrite failure recovery.
+		events = append([]eventcontract.Event{s.pageEvent(surface, predictionSubmittedPage(p, false))}, events...)
 	}
 	return events
+}
+
+func (s *Service) predictionSubmissionStarted(instanceID string, event agentproto.Event) []eventcontract.Event {
+	if event.Kind != agentproto.EventTurnStarted || event.TurnID == "" || event.Initiator.Kind == agentproto.InitiatorLocalUI {
+		return nil
+	}
+	binding := s.lookupRemoteTurnForEvent(instanceID, event)
+	if binding == nil {
+		return nil
+	}
+	p := s.predictions[binding.SurfaceSessionID]
+	if p == nil || !p.Submitting || p.InstanceID != instanceID || p.ThreadID != event.ThreadID ||
+		p.SendCommandID == "" || p.SendCommandID != binding.CommandID || p.SendQueueItemID != binding.QueueItemID {
+		return nil
+	}
+	if event.TurnID == p.SourceTurnID || (event.CommandID != "" && event.CommandID != p.SendCommandID) ||
+		(event.Initiator.SurfaceSessionID != "" && event.Initiator.SurfaceSessionID != p.SurfaceID) {
+		return nil
+	}
+	view := predictionSubmittedPage(p, true)
+	p.SendCommandID, p.EditedText = "", ""
+	return []eventcontract.Event{s.pageEvent(s.root.Surfaces[p.SurfaceID], view)}
 }
 
 func predictionOwnsSubmissionQueue(p *predictionRecord, surface *state.SurfaceConsoleRecord) bool {
@@ -278,7 +305,7 @@ func (s *Service) bindPredictionQueueItem(surface *state.SurfaceConsoleRecord, i
 
 func (s *Service) bindPredictionSendCommand(surface *state.SurfaceConsoleRecord, commandID string) {
 	p := s.predictions[surface.SurfaceSessionID]
-	if p != nil && !p.Canceled && p.Submitting && p.SendQueueItemID != "" && surface.ActiveQueueItemID == p.SendQueueItemID {
+	if p != nil && p.Submitting && p.SendQueueItemID != "" && surface.ActiveQueueItemID == p.SendQueueItemID {
 		p.SendCommandID = commandID
 	}
 }

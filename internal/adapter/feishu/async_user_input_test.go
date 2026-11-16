@@ -71,8 +71,8 @@ func TestAsyncUserInputNativeMessageCardCallbackRoundTrip(t *testing.T) {
 				}
 			}
 			questionBody := strings.Join(bodyParts, "\n")
-			if !containsAll(questionBody, "1. "+firstOption, "2. "+secondOption) {
-				t.Fatalf("question body must expose both complete numbered options outside buttons, got %q", questionBody)
+			if !strings.Contains(questionBody, "1. "+firstOption+"\n\n2. "+secondOption) {
+				t.Fatalf("question body must separate complete numbered options with a blank line, got %q", questionBody)
 			}
 			labels := map[string]string{}
 			for _, button := range cardActionsFromElements(elements) {

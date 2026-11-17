@@ -2,7 +2,6 @@ package orchestrator
 
 import (
 	"strings"
-	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -10,12 +9,9 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-const predictionTimeout = 30 * time.Second
-
 // One ephemeral record per surface also remembers consumed/expired source turns.
 type predictionRecord struct {
 	ID, SurfaceID, InstanceID, ThreadID, SourceTurnID, ActorUserID string
-	StartedAt                                                      time.Time
 	Suggestion                                                     string
 	Pending, Draft, Canceled                                       bool
 	EditedText, MessageID, SendQueueItemID, SendCommandID          string
@@ -79,7 +75,7 @@ func (s *Service) maybeRequestPrediction(outcome *remoteTurnOutcome) []eventcont
 	}
 	p := &predictionRecord{ID: "prediction:" + s.nextAgentCommandID(), SurfaceID: surface.SurfaceSessionID,
 		InstanceID: outcome.InstanceID, ThreadID: outcome.ThreadID, SourceTurnID: outcome.TurnID,
-		ActorUserID: outcome.Item.ActorUserID, StartedAt: s.now(), Pending: true}
+		ActorUserID: outcome.Item.ActorUserID, Pending: true}
 	if p.ActorUserID == "" || p.SourceTurnID == "" || !s.predictionTargetCurrent(p) {
 		return nil
 	}
@@ -161,13 +157,13 @@ func (s *Service) predictionEventPrelude(instanceID string, event agentproto.Eve
 	return events
 }
 
-func (s *Service) expirePredictions(now time.Time) []eventcontract.Event {
+func (s *Service) expirePredictions() []eventcontract.Event {
 	var events []eventcontract.Event
 	for _, p := range s.predictions {
 		if p.Canceled {
 			continue
 		}
-		if (p.Pending && now.Sub(p.StartedAt) >= predictionTimeout) || !s.predictionTargetCurrent(p) {
+		if !s.predictionTargetCurrent(p) {
 			events = append(events, s.invalidatePrediction(p)...)
 		}
 	}
@@ -180,7 +176,7 @@ func (s *Service) applyPredictionResult(instanceID string, event agentproto.Even
 			continue
 		}
 		p.Pending = false
-		if !s.predictionTargetCurrent(p) || s.now().Sub(p.StartedAt) >= predictionTimeout {
+		if !s.predictionTargetCurrent(p) {
 			p.Canceled = true
 			return nil
 		}

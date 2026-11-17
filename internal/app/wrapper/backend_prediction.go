@@ -15,6 +15,10 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
 
+// Desktop sendInternalRequest and sampleThread each wait 30 seconds for their
+// own response; preparation and relay delivery do not consume the sample budget.
+const predictionResponseTimeout = 30 * time.Second
+
 type predictionJob struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
@@ -30,7 +34,7 @@ type predictionRPCResponse struct {
 }
 
 func newPredictionRuntime() *predictionRuntime {
-	return &predictionRuntime{jobs: make(map[string]*predictionJob), pending: make(map[string]chan predictionRPCResponse), cache: make(map[string]predictionConfigCache), httpClient: &http.Client{Timeout: 30 * time.Second}, now: time.Now, sample: rand.Float64, desktopContext: readPredictionDesktopContext}
+	return &predictionRuntime{jobs: make(map[string]*predictionJob), pending: make(map[string]chan predictionRPCResponse), cache: make(map[string]predictionConfigCache), httpClient: &http.Client{}, now: time.Now, sample: rand.Float64, desktopContext: readPredictionDesktopContext}
 }
 
 // HandlePrediction returns immediately so native preparation never blocks relay commands.
@@ -60,7 +64,7 @@ func (r *codexBackendRuntime) HandlePrediction(ctx context.Context, command agen
 		r.mu.Unlock()
 		return true
 	}
-	jobCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	jobCtx, cancel := context.WithCancel(ctx)
 	job := &predictionJob{ctx: jobCtx, cancel: cancel, command: command, frames: frames}
 	r.predictions.jobs[command.CommandID] = job
 	r.mu.Unlock()
@@ -69,6 +73,8 @@ func (r *codexBackendRuntime) HandlePrediction(ctx context.Context, command agen
 }
 
 func (r *codexBackendRuntime) predictionRPC(ctx context.Context, frames chan<- []byte, method string, params any) (json.RawMessage, error) {
+	ctx, cancel := context.WithTimeout(ctx, predictionResponseTimeout)
+	defer cancel()
 	r.mu.Lock()
 	p := r.predictions
 	p.sequence++
@@ -269,6 +275,31 @@ func (r *codexBackendRuntime) preparePrediction(job *predictionJob, frames chan<
 	}
 	job.sampled = true
 	completed = true
+	timer := time.NewTimer(predictionResponseTimeout)
+	go r.waitPredictionSample(job, timer, sender)
+}
+
+func (r *codexBackendRuntime) waitPredictionSample(job *predictionJob, timer *time.Timer, sender relayEventSender) {
+	defer timer.Stop()
+	select {
+	case <-job.ctx.Done():
+		return
+	case <-timer.C:
+	}
+	r.mu.Lock()
+	command := job.command
+	if r.predictions.jobs[command.CommandID] != job || job.ctx.Err() != nil {
+		r.mu.Unlock()
+		return
+	}
+	delete(r.predictions.jobs, command.CommandID)
+	job.cancel()
+	outbound, _ := r.translator.TranslateCommand(agentproto.Command{Kind: agentproto.CommandThreadPredictionCancel,
+		Prediction: agentproto.PredictionCommand{RequestCommandID: command.CommandID}})
+	r.mu.Unlock()
+	sendPredictionCancels([]predictionCancellation{{frames: job.frames, outbound: outbound}})
+	_ = sender.SendEvents([]agentproto.Event{{Kind: agentproto.EventThreadPredictionResult, CommandID: command.CommandID,
+		ThreadID: command.Target.ThreadID, Prediction: &agentproto.PredictionResult{SourceTurnID: command.Prediction.SourceTurnID}}})
 }
 
 func (r *codexBackendRuntime) CancelPredictions() {

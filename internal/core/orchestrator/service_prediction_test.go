@@ -3,7 +3,6 @@ package orchestrator
 import (
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -122,7 +121,7 @@ func TestPredictionRejectsWrongActorTargetAndLateResult(t *testing.T) {
 			case "disconnect":
 				svc.ApplyInstanceDisconnected(iid)
 			case "timeout":
-				svc.Tick(svc.now().Add(31 * time.Second))
+				svc.ApplyAgentEvent(iid, predictionTestResult(t, request.CommandID, "turn-1", ""))
 			case "surface":
 				sid = "other-surface"
 			}

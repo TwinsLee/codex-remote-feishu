@@ -47,7 +47,7 @@ func TestPredictionQueuedDraftCannotSubmitTwice(t *testing.T) {
 	if findAgentCommand(svc.ApplySurfaceAction(action), agentproto.CommandPromptSend) != nil || len(surface.QueuedQueueItemIDs) != 1 {
 		t.Fatal("duplicate submit must not add another queue item")
 	}
-	svc.expirePredictions(svc.now())
+	svc.expirePredictions()
 	surface.DispatchMode = state.DispatchModeNormal
 	send := findAgentCommand(svc.dispatchNext(surface), agentproto.CommandPromptSend)
 	if send == nil {

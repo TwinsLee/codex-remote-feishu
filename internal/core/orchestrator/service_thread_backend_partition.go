@@ -69,30 +69,41 @@ func (s *Service) mergePersistedThreadMetadata(current, persisted *state.ThreadR
 	}
 	cwd := normalizeWorkspaceClaimKey(persisted.CWD)
 	workspaceKey := ""
-	consider := func(key string) {
+	hasThreadWorkspace := false
+	nativeWorkspace := func(thread *state.ThreadRecord, key string) bool {
+		return thread != nil && (thread.Loaded || normalizeWorkspaceClaimKey(thread.CWD) == normalizeWorkspaceClaimKey(key))
+	}
+	consider := func(key string, threadWorkspace bool) {
 		key = normalizeWorkspaceClaimKey(key)
 		if key == "" || (cwd != key && !strings.HasPrefix(cwd, key+"/")) {
 			return
 		}
+		hasThreadWorkspace = hasThreadWorkspace || threadWorkspace
 		if len(key) > len(workspaceKey) {
 			workspaceKey = key
 		}
 	}
 	// Preserve a stable root for an ordinary cwd change within that workspace.
-	consider(merged.WorkspaceKey)
+	consider(merged.WorkspaceKey, nativeWorkspace(current, merged.WorkspaceKey))
 	// RecentWorkspaces groups raw CWD values, which cannot establish a root
 	// over an explicit instance or restored surface workspace.
 	for _, inst := range s.root.Instances {
 		if inst != nil && state.EffectiveInstanceBackend(inst) == backend {
-			consider(instanceWorkspaceClaimKey(inst))
+			key := instanceWorkspaceClaimKey(inst)
+			thread := inst.Threads[persisted.ThreadID]
+			consider(key, threadBelongsToInstanceWorkspaceForTarget(inst, thread) && nativeWorkspace(thread, key))
 		}
 	}
 	for _, surface := range s.root.Surfaces {
 		if surface != nil && s.surfaceUsesWorkspaceClaims(surface) && s.surfaceBackend(surface) == backend {
-			consider(s.surfaceCurrentWorkspaceKey(surface))
+			consider(s.surfaceCurrentWorkspaceKey(surface), surface.SelectedThreadID == persisted.ThreadID || surfaceFeishuRoomID(surface) != "")
 		}
 	}
-	if workspaceKey == "" {
+	// A parent runtime for other threads is not evidence that this saved
+	// session belongs there. Keep cwd when no native thread or explicit owner
+	// supplies its workspace; unloaded copies with inherited parent roots do
+	// not establish a native workspace, even inside that parent's directory.
+	if workspaceKey == "" || !hasThreadWorkspace {
 		workspaceKey = cwd
 	}
 	merged.WorkspaceKey = workspaceKey

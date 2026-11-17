@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-11-18`
-> Summary: Predictions 对齐桌面采样计时：原生请求发出后等待 30 秒，正文投递与准备耗时不挤占生成时间。
+> Summary: 持久会话归属需有自身工作区依据，避免无关上级实例和全局列表副本隐藏子工作区会话。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -684,7 +684,8 @@ Codex 名称投影：SQLite catalog 兼容读取可选 `name` 列，显式名称
 
 1. target picker 的 workspace 候选按入口分成 attach / list / worktree-base 三种模式。
    1. 在线实例先按可见 thread 的稳定 `WorkspaceKey` 归并 workspace；`thread.CWD` 只保留为最近活跃子目录。只有当某个 instance 当前完全没有可见 thread，或 thread 侧缺失稳定 root 时，才回退到该 instance 的 `WorkspaceKey/WorkspaceRoot`。
-      - 合并较新的持久会话记录时，如果该记录只提供 `CWD`、没有显式 `WorkspaceKey`，以该目录匹配的最具体已知工作区根目录校正归属。已知根目录来自同 backend 的实例和恢复后的 headless surface；有效的原根目录也参与匹配，没有可匹配的根目录才回退到 `CWD`。SQLite `RecentWorkspaces` 按原始 `CWD` 聚合，不能作为独立根目录证据。已持久化的 room workspace 无需已有运行实例：重启后 surface 尚未接管时，新建的 persisted-only 列表视图、按 backend 的精确读取和全局精确回退都使用同一归属。
+      - 合并较新的持久会话记录时，如果该记录只提供 `CWD`、没有显式 `WorkspaceKey`，先确认该会话自身的工作区依据：有效原根目录的原生记录已加载或其原 `CWD` 等于该根目录；同 backend 实例确实包含符合上述条件且目录属于该实例的同 ID 记录；headless surface 选中了该会话；或已有明确的群 workspace 绑定。存在依据时，沿用最具体已知根目录匹配，候选来自同 backend 的实例、恢复后的 headless surface 和有效原根目录；没有依据或匹配根目录时回退到持久 `CWD`。
+      - 其他会话的上级目录实例、私聊 workspace claim，以及未加载且仅继承上级根目录的全局列表副本，不能单独建立该会话的归属。SQLite `RecentWorkspaces` 按原始 `CWD` 聚合，也不能作为独立根目录证据。已持久化的 room workspace 无需已有运行实例：重启后 surface 尚未接管时，新建的 persisted-only 列表视图、按 backend 的精确读取和全局精确回退都使用同一归属。
       - 原生全局 thread 列表可能被多个实例重复上报，冷启动后各副本的运行活跃时间又可能为空。副本附带的实例根目录不能覆盖上述校正；最近列表与按 ID 恢复必须使用同一归属规则。
       - 普通子目录下没有独立已知工作区时，保留原稳定根目录；较新的原生记录或持久记录显式提供的 `WorkspaceKey` 继续保持权威。
    2. merged thread views / persisted recent threads 仍会把 recoverable-only workspace 补进候选。

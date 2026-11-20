@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-11-20`
-> Summary: 补充下一句建议、异步提问布局、下拉宽度和选中目标核对信息。
+> Summary: 补充下一句建议、异步提问布局、下拉宽度、选中目标核对信息和投递失败提示。
 
 ## 1. 文档定位
 
@@ -700,6 +700,7 @@ MCP request 卡片当前新增的可视语义：
   - 它们通过 `control.Notice.DeliveryClass=global_runtime` 明确标记，不再只靠“刚好没传 `SourceMessageID`”这种隐式约定
   - projector 当前对所有 notice 都不会 reply 到任何 turn 源消息；`global runtime` 的特殊点只剩 dedupe / family 与独立系统车道
   - 当前这条车道覆盖真正脱离当前 owner-card / guidance-card 上下文的：surface resume failure、无 active guidance card 可复用的 VS Code resume failure / `open VS Code` prompt、`attached_instance_transport_degraded`、`daemon_shutting_down`、`gateway_apply_failed`
+  - 投递失败的 `gateway_apply_failed` 每批对同一会话最多尝试发送一次；仍无法投递则留待后续，不重放原消息或命令。提示用户先查当前状态再决定是否重试。已经不是卡片的目标无法重新 patch，按不可重试处理。
   - 若 `VS Code` 兼容修复、`open VS Code` prompt、恢复成功/失败或 `not_attached_vscode` guidance 已经拥有当前 surface 的 active `vscode guidance card`，daemon 会先把 notice 改写成 patchable direct-command card 并回写同一张 guidance card；只有没有可复用 guidance card 的后台 runtime 路径才会落到这条独立车道
 - 这些真正的 global runtime 系统提示不会借用 final-card anchor 或 turn reply-chain；它们仍作为独立系统提示出现在主时间线
 - `/cron`、`/upgrade`、`/debug` 的 stamped 菜单入口与 stamped page callback，当前都会直接把下一张 page 或结果卡同位替回当前卡，不再先外跳 append 一张独立状态/输入卡。

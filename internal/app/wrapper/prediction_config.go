@@ -290,9 +290,13 @@ func (p *predictionRuntime) cacheConfig(ctx context.Context, identity prediction
 }
 
 type predictionRuntime struct {
-	jobs           map[string]*predictionJob
-	pending        map[string]chan predictionRPCResponse
-	sequence       uint64
+	jobs     map[string]*predictionJob
+	pending  map[string]chan predictionRPCResponse
+	sequence uint64
+
+	canceledRequests    [predictionCanceledRequestLimit]string
+	nextCanceledRequest int
+
 	configMu       sync.Mutex
 	cache          map[string]predictionConfigCache
 	controls       map[string]predictionControls

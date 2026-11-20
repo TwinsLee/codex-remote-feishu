@@ -4,8 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -102,6 +106,128 @@ func TestDaemonGatewayFailureNoticeAttemptsAreBounded(t *testing.T) {
 	})
 	if len(gateway.batches) != 4 || len(app.pendingGlobalRuntimeNotices["surface-1"]) != 1 {
 		t.Fatalf("expected next action to attempt pending notice once without growing the queue, got %d calls and %#v", len(gateway.batches), app.pendingGlobalRuntimeNotices)
+	}
+}
+
+type runtimeNoticeApplyGateway func([]feishu.Operation) error
+
+func (runtimeNoticeApplyGateway) Start(context.Context, feishu.ActionHandler) error { return nil }
+
+func (g runtimeNoticeApplyGateway) Apply(_ context.Context, operations []feishu.Operation) error {
+	return g(operations)
+}
+
+func TestDaemonSerializesPendingRuntimeNoticeDelivery(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		err           error
+		retireGateway bool
+		want          []string
+	}{
+		{name: "success", want: []string{"first notice", "blocked notice", "appended notice"}},
+		{name: "retry", err: errors.New("lark temporarily unavailable"), want: []string{"first notice", "blocked notice", "blocked notice", "appended notice"}},
+		{name: "gateway retired", retireGateway: true, want: []string{"first notice", "blocked notice", "appended notice"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			const surfaceID = "feishu:app-1:chat:1"
+			attempts := make(chan string, 16)
+			blocked := make(chan struct{})
+			release := make(chan struct{})
+			unblock := sync.OnceFunc(func() { close(release) })
+			var blockedOnce atomic.Bool
+			gateway := runtimeNoticeApplyGateway(func(operations []feishu.Operation) error {
+				for _, op := range operations {
+					if op.CardTitle == "切换工作区与会话" {
+						continue
+					}
+					attempts <- op.CardTitle
+					if op.CardTitle == "blocked notice" && blockedOnce.CompareAndSwap(false, true) {
+						close(blocked)
+						<-release
+						return test.err
+					}
+				}
+				return nil
+			})
+			app := New(":0", ":0", gateway, serverIdentityForTest())
+			act := func() {
+				app.HandleAction(context.Background(), control.Action{
+					Kind: control.ActionListInstances, SurfaceSessionID: surfaceID, ChatID: "chat-1", ActorUserID: "user-1",
+				})
+			}
+			queueNotice := func(title string) {
+				app.mu.Lock()
+				defer app.mu.Unlock()
+				app.queueGlobalRuntimeNoticeLocked(eventcontract.Event{
+					Kind: eventcontract.KindNotice, SurfaceSessionID: surfaceID,
+					Notice: &control.Notice{
+						Code: "gateway_apply_failed", Title: title, Text: "飞书回显投递失败。",
+						DeliveryClass:    control.NoticeDeliveryClassGlobalRuntime,
+						DeliveryFamily:   control.NoticeDeliveryFamilyGatewayApplyFailure,
+						DeliveryDedupKey: title,
+					},
+				})
+			}
+			queueNotice("first notice")
+			queueNotice("blocked notice")
+			firstDone := make(chan struct{})
+			go func() {
+				act()
+				close(firstDone)
+			}()
+			defer func() {
+				unblock()
+				<-firstDone
+			}()
+			select {
+			case <-blocked:
+			case <-time.After(3 * time.Second):
+				t.Fatal("initial flush never reached the second notice")
+			}
+
+			concurrentDone := make(chan struct{})
+			go func() {
+				if test.retireGateway {
+					app.mu.Lock()
+					app.purgeFeishuGatewayRuntimeStateLocked("app-1", nil)
+					app.mu.Unlock()
+				}
+				queueNotice("appended notice")
+				act()
+				close(concurrentDone)
+			}()
+			defer func() {
+				unblock()
+				<-concurrentDone
+			}()
+			select {
+			case <-concurrentDone:
+			case <-time.After(3 * time.Second):
+				t.Fatal("concurrent action waited for the in-flight notice")
+			}
+			wantWhileBlocked := 2
+			if test.retireGateway {
+				// The replacement gateway can deliver without waiting for the retired gateway.
+				wantWhileBlocked++
+			}
+			if got := len(attempts); got != wantWhileBlocked {
+				t.Errorf("notice attempts while old delivery was blocked = %d, want %d", got, wantWhileBlocked)
+			}
+			unblock()
+			<-firstDone
+			if test.err != nil {
+				act()
+			}
+
+			close(attempts)
+			var got []string
+			for title := range attempts {
+				got = append(got, title)
+			}
+			if !slices.Equal(got, test.want) {
+				t.Errorf("notice attempts = %v, want %v", got, test.want)
+			}
+		})
 	}
 }
 

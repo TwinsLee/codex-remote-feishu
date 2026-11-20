@@ -111,12 +111,6 @@ func (s *Service) invalidatePrediction(p *predictionRecord) []eventcontract.Even
 }
 
 func (s *Service) predictionActionPrelude(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
-	p := s.predictions[surface.SurfaceSessionID]
-	// Only the recursive ordinary-text dispatch retains the draft's token.
-	if action.Kind == control.ActionTextMessage && p != nil && p.Submitting && !p.Canceled &&
-		action.PredictionID == p.ID && action.ActorUserID == p.ActorUserID && action.MessageID == p.MessageID && action.Text == p.EditedText {
-		return nil
-	}
 	switch action.Kind {
 	case control.ActionPredictionAccept, control.ActionPredictionSend, control.ActionStatus,
 		control.ActionReactionCreated, control.ActionMessageRecalled:
@@ -147,7 +141,8 @@ func (s *Service) predictionEventPrelude(instanceID string, event agentproto.Eve
 		return append(events, s.invalidateInstancePredictions(instanceID)...)
 	}
 	nativeActive := event.Kind == agentproto.EventThreadRuntimeStatusUpdated && event.RuntimeStatus != nil && event.RuntimeStatus.Type == agentproto.ThreadRuntimeStatusTypeActive
-	if event.Kind == agentproto.EventTurnCompleted || nativeActive {
+	turnCompleted := event.Kind == agentproto.EventTurnCompleted && remoteTurnStartAccepted(remoteTurnCompletionOrigin(event))
+	if turnCompleted || nativeActive {
 		for _, p := range s.predictions {
 			if p.InstanceID == instanceID && p.ThreadID == event.ThreadID && (nativeActive || p.SourceTurnID != event.TurnID) {
 				events = append(events, s.invalidatePrediction(p)...)
@@ -233,21 +228,54 @@ func (s *Service) handlePredictionAction(surface *state.SurfaceConsoleRecord, ac
 		return []eventcontract.Event{s.pageEvent(surface, view)}
 	}
 	p.EditedText, p.MessageID, p.Submitting = text, action.MessageID, true
-	action.Kind = control.ActionTextMessage
-	action.Text = text
-	action.Inbound = nil
-	action.LocalPageAction = false
-	events := s.ApplySurfaceAction(action)
+	events := s.enqueuePredictionText(surface, action, p)
 	if p.SendQueueItemID == "" {
 		p.Submitting = false
 		if s.predictionTargetCurrent(p) {
-			events = append([]eventcontract.Event{s.pageEvent(surface, predictionDraftCallbackPage(p))}, events...)
+			view := predictionDraftCallbackPage(p)
+			if len(events) == 1 && events[0].Notice != nil {
+				view.StatusText = events[0].Notice.Text
+				events = nil
+			}
+			events = append([]eventcontract.Event{s.pageEvent(surface, view)}, events...)
 		}
 	} else {
 		// Patch before dispatch; an unchanged callback cannot overwrite failure recovery.
 		events = append([]eventcontract.Event{s.pageEvent(surface, predictionSubmittedPage(p, false))}, events...)
 	}
 	return events
+}
+
+func (s *Service) enqueuePredictionText(surface *state.SurfaceConsoleRecord, action control.Action, p *predictionRecord) []eventcontract.Event {
+	action.Kind = control.ActionTextMessage
+	if blocked := s.blockFeishuRoomNoWorkspaceDataPlane(surface, action); blocked != nil {
+		return blocked
+	}
+	if blocked := s.blockFeishuRoomActiveDispatch(surface); blocked != nil {
+		return blocked
+	}
+	if surface.ActiveRequestCapture != nil || surface.ReviewSession != nil {
+		return notice(surface, "prediction_input_blocked", "请先结束当前的反馈或审阅，再发送这条消息。")
+	}
+	inst := s.root.Instances[p.InstanceID]
+	if surface.ContractRefreshPending && !s.surfaceInstanceCompatibleForAttach(surface, inst) {
+		return notice(surface, "contract_refresh_pending", "机器人配置已变化。请复制正文，重新选择会话后发送。")
+	}
+	threadID, cwd, routeMode, _ := freezeRoute(inst, surface)
+	if threadID != p.ThreadID || strings.TrimSpace(cwd) == "" {
+		return notice(surface, "thread_not_ready", "原会话暂时无法接收消息，请确认会话和工作目录后重试。")
+	}
+	threadPolicy := s.freezeCodexThreadPolicyForPrompt(surface)
+	if s.codexCrossModelGroupTargetSource(inst, surface, threadID, cwd, surface.PromptOverride, threadPolicy) != "" {
+		return notice(surface, "prediction_model_group_changed", "当前模型需要开启新会话。请复制正文，再选择模型或另行发送。")
+	}
+	s.noteAutoWhipAction(surface, action)
+	s.recordInboundSurfaceMessage(surface, action.MessageID, state.SurfaceMessageKindText)
+	inputs, stagedMessageIDs := s.stagedPromptInputs(surface, action.ActorUserID)
+	inputs = append(inputs, agentproto.Input{Type: agentproto.InputText, Text: p.EditedText})
+	s.clearPendingTextInput(surface)
+	events := s.maybeSealPlanProposalForInput(surface)
+	return append(events, s.enqueueQueueItem(surface, action.MessageID, p.EditedText, stagedMessageIDs, inputs, threadID, cwd, routeMode, surface.PromptOverride, false)...)
 }
 
 func (s *Service) predictionSubmissionStarted(instanceID string, event agentproto.Event) []eventcontract.Event {

@@ -116,6 +116,40 @@ func TestPredictionPreparationUsesOfficialConfigAndOriginalThread(t *testing.T) 
 
 }
 
+func TestPredictionCancelBeforeRequestPreventsPreparation(t *testing.T) {
+	runtime := newBackendRuntime(Config{Backend: agentproto.BackendCodex, InstanceID: "instance"}).(*codexBackendRuntime)
+	t.Cleanup(runtime.CancelPredictions)
+	ctx := context.Background()
+	frames := make(chan []byte, 4)
+	events := predictionEventRecorder{make(chan []agentproto.Event, 4)}
+	request := predictionRequest()
+	cancel := agentproto.Command{
+		Kind: agentproto.CommandThreadPredictionCancel, CommandID: "prediction-cancel:test",
+		Prediction: agentproto.PredictionCommand{RequestCommandID: request.CommandID},
+	}
+
+	if !runtime.HandlePrediction(ctx, cancel, frames, events) {
+		t.Fatal("early cancel was not intercepted")
+	}
+	for range 2 {
+		if !runtime.HandlePrediction(ctx, request, frames, events) {
+			t.Fatal("late request was not intercepted")
+		}
+	}
+	runtime.mu.Lock()
+	job := runtime.predictions.jobs[request.CommandID]
+	runtime.mu.Unlock()
+	if job != nil {
+		t.Fatal("late canceled request started native preparation")
+	}
+
+	request.CommandID = "prediction:new"
+	runtime.HandlePrediction(ctx, request, frames, events)
+	if frame := predictionFrame(t, frames); frame["method"] != "getAuthStatus" {
+		t.Fatalf("an unrelated request did not start preparation: %#v", frame)
+	}
+}
+
 func TestPredictionCancelDuringPreparationSuppressesLateAuth(t *testing.T) {
 	runtime := newBackendRuntime(Config{Backend: agentproto.BackendCodex, InstanceID: "instance"}).(*codexBackendRuntime)
 	frames := make(chan []byte, 16)
@@ -151,6 +185,44 @@ func TestPredictionPreparationFailureEndsRoundQuietly(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("preparation failure left round pending")
+	}
+}
+
+func TestPredictionFullQueueDiscardsUnsentSample(t *testing.T) {
+	runtime, frames, events := predictionTimeoutFixture(t)
+	predictionAuthenticate(t, runtime, frames, "user", "account", false)
+	resume := predictionFrame(t, frames)
+	if resume["method"] != "thread/resume" {
+		t.Fatalf("unexpected preparation: %#v", resume)
+	}
+	// Fill the native write queue before letting the resume response advance to sampling.
+	for range cap(frames) {
+		frames <- []byte("occupied")
+	}
+	predictionReply(t, runtime, resume, map[string]any{"modelProvider": "openai", "model": "supported"})
+
+	request := predictionRequest()
+	select {
+	case batch := <-events.events:
+		if len(batch) != 1 || batch[0].Kind != agentproto.EventThreadPredictionResult ||
+			batch[0].CommandID != request.CommandID || batch[0].Prediction == nil ||
+			batch[0].Prediction.SourceTurnID != request.Prediction.SourceTurnID || batch[0].Prediction.Suggestion != "" {
+			t.Fatalf("full queue must end its prediction quietly: %#v", batch)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("full native queue stalled prediction completion")
+	}
+	for range cap(frames) {
+		if frame := <-frames; string(frame) != "occupied" {
+			t.Fatalf("full queue unexpectedly received a prediction frame: %s", frame)
+		}
+	}
+
+	runtime.mu.Lock()
+	_, err := runtime.translator.TranslatePredictionRequest(request, codex.PredictionOptions{Prompt: "official prompt"})
+	runtime.mu.Unlock()
+	if err != nil {
+		t.Fatalf("translator retained the prediction that never reached native: %v", err)
 	}
 }
 

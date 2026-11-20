@@ -177,3 +177,19 @@ func TestPredictionDraftUsesFullWidthMultilineInput(t *testing.T) {
 	}
 	t.Fatal("missing prediction text field")
 }
+
+func TestPredictionRejectedCallbackPreservesOriginalCard(t *testing.T) {
+	app, gateway, _, owner := predictionCallbackFixture(t)
+	other := owner
+	other.ActorUserID = "another-user"
+	result := app.HandleGatewayAction(context.Background(), other)
+	if result != nil && result.ReplaceCurrentCard != nil {
+		t.Fatal("another user's rejected click replaced the original card")
+	}
+	for _, op := range gateway.operations {
+		if op.Kind == feishu.OperationUpdateCard && op.MessageID == owner.MessageID {
+			t.Fatal("another user's rejected click patched the original card")
+		}
+	}
+	requirePredictionDraftReplacement(t, app.HandleGatewayAction(context.Background(), owner))
+}

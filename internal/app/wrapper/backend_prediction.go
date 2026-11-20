@@ -19,6 +19,8 @@ import (
 // own response; preparation and relay delivery do not consume the sample budget.
 const predictionResponseTimeout = 30 * time.Second
 
+const predictionCanceledRequestLimit = 128
+
 type predictionJob struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
@@ -47,11 +49,18 @@ func (r *codexBackendRuntime) HandlePrediction(ctx context.Context, command agen
 		r.predictions = newPredictionRuntime()
 	}
 	if command.Kind == agentproto.CommandThreadPredictionCancel {
+		requestID := command.Prediction.RequestCommandID
+		// Relay dispatch can deliver the cancel while the request is still on its way.
+		if requestID != "" && !slices.Contains(r.predictions.canceledRequests[:], requestID) {
+			next := r.predictions.nextCanceledRequest
+			r.predictions.canceledRequests[next] = requestID
+			r.predictions.nextCanceledRequest = (next + 1) % predictionCanceledRequestLimit
+		}
 		var outbound [][]byte
-		job := r.predictions.jobs[command.Prediction.RequestCommandID]
+		job := r.predictions.jobs[requestID]
 		if job != nil {
 			job.cancel()
-			delete(r.predictions.jobs, command.Prediction.RequestCommandID)
+			delete(r.predictions.jobs, requestID)
 			if job.sampled {
 				outbound, _ = r.translator.TranslateCommand(command)
 			}
@@ -60,7 +69,8 @@ func (r *codexBackendRuntime) HandlePrediction(ctx context.Context, command agen
 		sendPredictionCancels([]predictionCancellation{{frames: frames, outbound: outbound}})
 		return true
 	}
-	if r.predictions.jobs[command.CommandID] != nil {
+	if r.predictions.jobs[command.CommandID] != nil ||
+		(command.CommandID != "" && slices.Contains(r.predictions.canceledRequests[:], command.CommandID)) {
 		r.mu.Unlock()
 		return true
 	}
@@ -269,7 +279,7 @@ func (r *codexBackendRuntime) preparePrediction(job *predictionJob, frames chan<
 		select {
 		case frames <- frame:
 		default:
-			_, _ = r.translator.TranslateCommand(agentproto.Command{Kind: agentproto.CommandThreadPredictionCancel, Prediction: agentproto.PredictionCommand{RequestCommandID: command.CommandID}})
+			r.translator.DiscardUnsentPrediction(command.CommandID)
 			return
 		}
 	}

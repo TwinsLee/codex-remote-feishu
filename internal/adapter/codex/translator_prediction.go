@@ -71,6 +71,17 @@ func (t *Translator) TranslatePredictionRequest(command agentproto.Command, opti
 	return [][]byte{append(raw, '\n')}, nil
 }
 
+// DiscardUnsentPrediction removes ownership of a sample the native write queue rejected.
+func (t *Translator) DiscardUnsentPrediction(commandID string) {
+	commandID = strings.TrimSpace(commandID)
+	for requestID, pending := range t.pendingPredictions {
+		if pending.CommandID == commandID {
+			delete(t.pendingPredictions, requestID)
+			return
+		}
+	}
+}
+
 func (t *Translator) translatePredictionCancel(command agentproto.Command) ([][]byte, error) {
 	commandID := strings.TrimSpace(command.Prediction.RequestCommandID)
 	if commandID == "" {

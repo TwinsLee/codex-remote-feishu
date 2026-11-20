@@ -587,6 +587,9 @@ func (s *Service) completeRemoteTurn(outcome *remoteTurnOutcome) []eventcontract
 	events = append(events, s.releaseCompletedShellCommandAttachments(surface, outcome.ThreadID, outcome.TurnID)...)
 	events = append(events, s.maybeScheduleAutoWhipAfterRemoteTurn(surface, item, outcome.TurnID, outcome.Cause, outcome.FinalText, outcome.Summary)...)
 	s.clearRemoteTurn(outcome.InstanceID, outcome.TurnID)
+	if outcome.Cause == terminalCauseStartupFailed && binding.StartedAt.IsZero() {
+		events = append(events, s.restorePredictionDraftAfterDispatchFailure(surface.SurfaceSessionID, binding.CommandID)...)
+	}
 	return events
 }
 

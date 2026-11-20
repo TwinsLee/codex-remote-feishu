@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-11-20`
-> Summary: 补充 Codex 下一句建议的采样、取消、结果和能力声明协议。
+> Summary: 补充 Codex 下一句建议的取消顺序和采样写队列满时的清理规则。
 
 ## 1. 文档定位
 
@@ -654,8 +654,8 @@ queue interlock 状态机（`pause_pending -> quiescing -> draining -> resume_pe
 
 Predictions 使用独立 command/result，不产生普通代理 turn，也不与原生异步问题混用：
 
-- `thread.prediction.request`：`commandId` 唯一标识本次采样，`target.threadId` 是当前用户根线程，`prediction.sourceTurnId` 是已成功结束的源轮次；`origin.surface` / `origin.userId` 保留发起 surface 和用户。`prediction.instanceId` 冻结原实例，仅供 daemon 选路，不作为 `thread/sample` 参数。
-- `thread.prediction.cancel`：同样保留原实例和 thread，`prediction.requestCommandId` 指向原采样 command；不能随 surface 后续切换改投另一个实例。
+- `thread.prediction.request`：`commandId` 唯一标识本次采样，`target.threadId` 是当前用户根线程，`prediction.sourceTurnId` 是已成功结束的源轮次；`origin.surface` / `origin.userId` 保留发起 surface 和用户。`prediction.instanceId` 冻结原实例，仅供 daemon 选路。若原生写队列未接收采样帧，wrapper 清理未发送请求的关联并回传空结果。
+- `thread.prediction.cancel`：同样保留原实例和 thread，`prediction.requestCommandId` 指向原采样 command；不能随 surface 后续切换改投另一个实例。wrapper 在内存中记住最近 128 个不同的取消 ID，覆盖取消先于请求到达的情况；命中时跳过该请求的原生准备。
 - `thread.prediction.result`：事件 `commandId` 回指原 request，`threadId` 与 `prediction.sourceTurnId` 保留源绑定。`prediction.suggestion` 是按桌面原生 schema 解析的单条建议，不另加长度或语言限制；无文本或空建议不展示，解析错误通过 `errorMessage` 返回。`prediction.unsupported=true` 表示采样 RPC 返回 `-32601`，或返回 `-32600` 且消息严格以 ``Invalid request: unknown variant `thread/sample`,`` 开头；源轮次过期、未加载或其他方法错误不能标为不支持。
 
 Codex wrapper 显式声明 `Capabilities.ThreadPrediction`（wire 字段 `threadPrediction`），仅证明 wrapper 能译码这些 command，不能证明其底层 CLI 支持采样。旧 wrapper 未显式声明时不发送新 command，也不把能力补入 legacy 默认值。底层 CLI 返回上述明确不支持错误后，orchestrator 在本次实例连接内停止自动采样，并只提示一次；断线后的新连接重新判定。其他采样失败不影响原会话的正常完成结果。

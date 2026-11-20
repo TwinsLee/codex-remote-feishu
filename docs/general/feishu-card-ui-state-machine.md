@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-11-20`
-> Summary: 补充下一句建议、异步提问布局、下拉宽度、选中目标核对信息和投递失败提示。
+> Summary: 补充下一句建议共享卡拒绝、失败恢复与投递通知并发规则。
 
 ## 1. 文档定位
 
@@ -700,7 +700,7 @@ MCP request 卡片当前新增的可视语义：
   - 它们通过 `control.Notice.DeliveryClass=global_runtime` 明确标记，不再只靠“刚好没传 `SourceMessageID`”这种隐式约定
   - projector 当前对所有 notice 都不会 reply 到任何 turn 源消息；`global runtime` 的特殊点只剩 dedupe / family 与独立系统车道
   - 当前这条车道覆盖真正脱离当前 owner-card / guidance-card 上下文的：surface resume failure、无 active guidance card 可复用的 VS Code resume failure / `open VS Code` prompt、`attached_instance_transport_degraded`、`daemon_shutting_down`、`gateway_apply_failed`
-  - 投递失败的 `gateway_apply_failed` 每批对同一会话最多尝试发送一次；仍无法投递则留待后续，不重放原消息或命令。提示用户先查当前状态再决定是否重试。已经不是卡片的目标无法重新 patch，按不可重试处理。
+  - 投递失败的 `gateway_apply_failed` 在同一机器人身份下对同一会话串行投递，当前批次会接续处理投递期间新增的通知，仍无法投递则留待后续。身份退役会放弃旧队列，新身份可独立投递。提示用户先查当前状态再决定是否重试。已经不是卡片的目标无法重新 patch，按不可重试处理。
   - 若 `VS Code` 兼容修复、`open VS Code` prompt、恢复成功/失败或 `not_attached_vscode` guidance 已经拥有当前 surface 的 active `vscode guidance card`，daemon 会先把 notice 改写成 patchable direct-command card 并回写同一张 guidance card；只有没有可复用 guidance card 的后台 runtime 路径才会落到这条独立车道
 - 这些真正的 global runtime 系统提示不会借用 final-card anchor 或 turn reply-chain；它们仍作为独立系统提示出现在主时间线
 - `/cron`、`/upgrade`、`/debug` 的 stamped 菜单入口与 stamped page callback，当前都会直接把下一张 page 或结果卡同位替回当前卡，不再先外跳 append 一张独立状态/输入卡。
@@ -854,15 +854,15 @@ MCP request 卡片当前新增的可视语义：
 
 ### 6.5 Predictions 建议与编辑草稿的 freshness
 
-Predictions 通过独立的“下一句建议”页面展示单条建议；“采用并编辑”使用 `page_local_action`，经同步 callback 原位替换为独立编辑表单；采用及可恢复的同步校验拒绝返回的 view 不带 `MessageID`，避免误投影成后台 patch 再与 callback 竞争，记录本身仍保留原卡 ID 供后续失败恢复使用；表单首次填入建议，使用 `multiline_text` 支持换行，输入框 `width=fill` 自适应卡片宽度且标签置于上方；用户可修改或清空，清空后不会重新填入建议，“发送”使用 `page_local_submit` 才进入普通输入路径。两种动作都在 callback 的 `request_id` 携带原采样 command ID，gateway 还原为 `PredictionID`；该 ID 不是上游待答问题的 request，也不代表已经发送消息。
+Predictions 通过独立的“下一句建议”页面展示单条建议；“采用并编辑”使用 `page_local_action`，经同步 callback 原位替换为独立编辑表单；采用及可恢复的同步校验拒绝返回的 view 不带 `MessageID`，避免误投影成后台 patch 再与 callback 竞争，记录本身仍保留原卡 ID 供后续失败恢复使用；表单首次填入建议，使用 `multiline_text` 支持换行，输入框 `width=fill` 自适应卡片宽度且标签置于上方；用户可修改或清空，清空后不会重新填入建议，“发送”使用 `page_local_submit` 提交给原会话。两种动作都在 callback 的 `request_id` 携带原采样 command ID，gateway 还原为 `PredictionID`，仅用于关联建议及提交。
 
 daemon 的通用卡片 freshness 之外，orchestrator 还按原用户、surface、instance、thread、源 turn 与当前易失记录校验采用和发送。新输入、原生新轮次、焦点或选中目标变化、断线、采样超时都会使旧记录失效；跨用户、重复或旧上下文回调只能被拒绝，不能改投当前 thread。采样响应由 wrapper 从原生 `thread/sample` 发出后等待 30 秒，超时尽力取消并回传空结果；正文投递和准备阶段不挤占采样时间，orchestrator 不另加从正文结束起的总期限；建议与草稿不另加本地时间或长度策略，仍按原上下文重新验证；重启后旧卡没有可恢复的服务端记录。飞书聊天输入框不会被写入，也不依赖正在输入事件或原生 Tab 键。
 
-独立表单不覆盖普通草稿载体。编辑提交绑定原 queue item 与实际 command，排队或派发期间拒绝重复提交；空提交同步保留空表单并提示输入；普通输入校验拒绝时先同步返回保留编辑内容的表单，原校验提示作为独立消息追加，不能同时后台 patch 原卡。
+独立表单不覆盖普通草稿载体。编辑提交绑定原 queue item 与实际 command，排队或派发期间拒绝重复提交。空提交同步保留空表单并提示输入；提交前的可恢复校验错误直接显示在保留编辑内容的表单上。跨用户、过期或重复点击的拒绝提示独立追加，原共享卡保留。
 
 提交进入队列后，派发前先后台更新原卡为只读回执，保留完整编辑正文，移除输入框和发送按钮，显示“已提交，等待处理”；该成功路径不同时返回 callback 替换卡，避免覆盖后续失败恢复。只有原 instance/thread、queue item 与 command 对应的新 `TurnStarted` 才将原卡更新为“已发送，任务已开始处理”；旧源轮次、其他 command/surface、local turn 不能确认这次提交。此前收到 `RuntimeStatus=active` 仍可使建议失效，但保留已提交正文及原队列的 command 关联，供排队结束后真实开始时生成回执，不恢复旧建议的操作权。
 
-派发失败及 wrapper 显式拒绝在任务确认开始前仍后台恢复原 `MessageID` 上的编辑内容供手动重试，不自动重发；执行开始后的失败或迟到拒绝不能恢复发送入口。其他命令失败及已因新输入、切换或过期而失效的记录不能复活草稿。回执更新失败沿用现有投递错误提示，不回滚或重复投递正文；后台重复提交保护仍独立生效。原生 `RuntimeStatus=active` 及 active 快照也会拦截旧建议，恢复 idle 不会恢复已失效记录。这些行为已有本地回归；内容来自官方动态提示词与原生 sample 结果，飞书侧只承接展示、编辑和显式发送；官方 moderation policy 命中时采样结果为空，不再展示建议，也不在飞书层补充分类或改写。核心生命周期见 [remote surface 4.19](./remote-surface-state-machine.md#419-predictions-是绑定原上下文的易失建议不是新的执行队列)。
+任务确认开始前的派发失败、wrapper 显式拒绝或对应的原生启动拒绝，会后台恢复原 `MessageID` 上的编辑内容供手动重试；执行开始后的失败或迟到拒绝不能恢复发送入口。其他命令失败及已因新输入、切换或过期而失效的记录不能复活草稿。回执更新失败沿用现有投递错误提示，不回滚或重复投递正文；后台重复提交保护仍独立生效。原生 `RuntimeStatus=active` 及 active 快照也会拦截旧建议，恢复 idle 不会恢复已失效记录。这些行为已有本地回归；内容来自官方动态提示词与原生 sample 结果，飞书侧只承接展示、编辑和显式发送；官方 moderation policy 命中时采样结果为空，不再展示建议，也不在飞书层补充分类或改写。核心生命周期见 [remote surface 4.19](./remote-surface-state-machine.md#419-predictions-是绑定原上下文的易失建议不是新的执行队列)。
 
 ## 7. 当前回归基线
 

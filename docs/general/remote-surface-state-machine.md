@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-11-20`
-> Summary: 补充下一句建议状态与历史会话归属，避免无关父目录占用子会话的工作区。
+> Summary: 补充下一句建议原会话发送、启动失败恢复与运行通知并发投递规则。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -1263,11 +1263,11 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 
 采样响应按桌面 `sampleThread` 的边界由 wrapper 等待 30 秒，从原生 `thread/sample` 发出时开始计时；正文投递、鉴权、配置获取和会话准备不扣减采样时间。超时由 wrapper 尽力取消原采样并回传空结果，orchestrator 消费一次后结束等待，不再按正文结束时间丢弃仍有效的结果。准备阶段的各次原生 RPC 沿用桌面的单请求 30 秒响应上限，配置 HTTP 请求服从当前取消上下文，不另加全流程期限。建议和编辑草稿也不另加本地年龄上限，只按原用户、实例、thread 与源轮次的上下文是否仍有效判断。daemon 收到新输入、原生轮次开始、焦点变化、当前目标切换或实例断线时，原建议失效；pending 采样向原实例发送取消，迟到成功也不能复活旧记录。结果、采用和发送均重新核对上述绑定、当前空闲条件及有效期；不能把上一轮建议转投到新 thread，也不能让跨用户、重复或旧轮次回调启动任务。
 
-“采用并编辑”只打开以建议为默认值的独立表单，不入普通执行队列。用户可修改文本；点击“发送”才作为普通 `ActionTextMessage` 进入现有输入门禁和 dispatch，保持与手工输入相同的目标、队列和权限规则。这里的新输入指 daemon 已收到的消息或动作，不承诺监听飞书正在输入事件，也没有原生 Tab 接受行为。
+“采用并编辑”打开以建议为默认值的独立表单。只有点击“发送”才按工作区和输入门禁校验，随后以原实例和原 thread 为目标进入现有用户执行队列。编辑后的正文按字面发送，临时会话标记保留在正文中。需要开启新会话的跨模型组设置会让表单保留编辑内容并提示原因，交由用户调整模型或另行发送。这里的新输入指 daemon 已收到的消息或动作，不承诺监听飞书正在输入事件，也没有原生 Tab 接受行为。
 
 Predictions 使用独立表单与易失编辑内容，不覆盖普通草稿载体。发送时以原 queue item 和实际派发 command 关联，排队或发送中拒绝重复提交；入队后先将原卡更新为保留完整正文的只读提交回执，确认原 command/queue item 对应的新轮次开始后更新为已发送；回执投递失败不回滚或重复派发正文。回执细节由 [Feishu UI 6.5](./feishu-card-ui-state-machine.md#65-predictions-建议与编辑草稿的-freshness) 维护。
 
-空提交保留空表单并提示输入；输入校验拒绝同步替换为保留编辑内容的原卡表单，校验提示独立追加；任务确认开始前的派发失败或 wrapper 显式拒绝才后台恢复原卡。以上失败均允许用户修改后显式重试，不自动重发；任务开始后的执行失败及迟到拒绝不能恢复发送入口。新输入、目标变化、过期及其他命令失败都不能恢复旧草稿。这些行为已通过本地回归。
+空提交保留空表单并提示输入；输入校验拒绝时同步在表单上显示原因并保留编辑内容。任务确认开始前的派发失败、wrapper 显式拒绝或对应的原生启动拒绝会后台恢复原卡，允许用户修改后显式重试。任务开始后的执行失败及迟到拒绝不能恢复发送入口。新输入、目标变化、过期及其他命令失败也不能恢复旧草稿。这些行为已通过本地回归。
 
 原生 `RuntimeStatus=active` 即使没有 `TurnStarted` 也会使旧建议永久失效，后来恢复 idle 不能复活；active 快照同样阻止结果展示和采用。如果完成事件先于 idle 更新，本轮保守跳过建议，不新增等待或自动重试状态。生成侧使用桌面官方动态配置和原生 sample 路径，不自行选择模型、改写提示词或调推理强度；配置取不到则无建议。内容侧另从桌面同源官方 bootstrap 获取取消开关与 moderation policy，按原生源轮次 metadata 执行官方过滤；执行门禁不代替内容过滤。开关和 policy 按当前进程及 principal 缓存，重启后的首次预测重新获取，不写入持久化文件、不增加刷新队列；缺失时保持桌面的无附加 policy 行为。
 
@@ -1806,7 +1806,7 @@ transport degraded retained attachment
    1. resume failure / VS Code open prompt 仍以 source 侧恢复 backoff 为主，helper 只额外做短窗去重，避免同批次重复弹出
    2. `attached_instance_transport_degraded` 当前按 `surface + family + code` 做短窗节流，避免离线抖动时连续刷同一张系统提示
    3. `daemon_shutting_down` 当前仍是一轮 shutdown 里每 surface 最多一条，并附带较长 dedupe 窗口
-   4. `gateway_apply_failed` 当前会先排入 daemon 的 pending runtime notice 队列，待下一次正常 gateway apply 成功前置冲刷；同 surface 同 family 的重复错误会按 dedupe key 收敛
+   4. `gateway_apply_failed` 先排入 daemon 的 pending runtime notice 队列。同一机器人身份下，同一 surface 由单一批次继续投递队列，逐条移除发送成功的通知，投递失败则留待后续批次。身份退役会放弃旧队列，新身份可独立投递；同 surface 同 family 的重复错误按 dedupe key 收敛
 12. 因此，后续若新增真正属于 runtime 层的提示，默认应进入这条独立车道，而不是继续直接手写普通 `UIEventNotice`。
 
 ## 6. 命令矩阵

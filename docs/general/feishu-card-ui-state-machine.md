@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-11-20`
-> Summary: 补充下一句建议卡的编辑、提交回执和过期校验。
+> Summary: 补充下一句建议、异步提问布局、下拉宽度和选中目标核对信息。
 
 ## 1. 文档定位
 
@@ -233,8 +233,10 @@ Goal 当前的回显约束：
 - `async_user_input` 用于原生异步问题消息，复用 page card 的按钮和 `answer` 输入表单。payload 仅传 `request_id`、`request_revision`、`option_id`，gateway 写入 `Action.Request`；题目、选项文本和 instance/thread 目标以服务端草稿为准。此动作要求当前 daemon stamp；每答一题增加 revision 并按原 MessageID 更新同一卡；拒绝回答只追加提示，不覆盖问题卡，最后封卡提示“回答已进入发送队列”。草稿在 daemon 内独立保存，不建立同步 RPC、普通输入 gate 或 active owner flow；换会话、非原发起者、旧 revision、重复提交、重启后旧卡均拒绝，未知消息结构保留文本回退。
   - 原 `agentMessage.text` 作为题前说明保留；超过 1000 字符时通过普通文本 renderer 完整输出，卡中仅留带截断提示的预览。已答题目和答案只在卡面共享显示预算，发往原会话的完整题目/答案不截断。最多 16 题、每题 16 选项、全部题目/选项合计不超过 1000 字符才使用交互卡；超出时完整输出正文、题目和全部选项并提示直接回复，不发送超预算卡，也不静默删选项。
   - 问题卡标明一小时有效。每个 surface 最多 32 份活跃草稿，超过时最早草稿失效；提交或过期即释放正文/题目/答案，仅留去重记录。去重记录最多保留最近 128 份且最长 24 小时，tick 和新事件入口都会回收；保留窗口内重放不重新出卡。过期或被淘汰的回调拒绝并提示直接回复，不阻塞普通输入。
+- 异步提问卡在正文完整列出编号选项，题目和选项间留空行；短选择按钮可随窄屏换行，补充回答单行输入铺满并把标签放在上方。选项仍按原索引提交，保留题前说明、草稿保留规则和卡片预算。
 - 分页导航与 target/path picker / selection dropdown 当前也复用这套 schema：projector 负责写入 `page` / `view_mode` / `return_page` / `picker_id` / `field_name` / `cursor`，gateway 负责解析回 `control.Action`，Feishu UI controller 再用这些字段重建当前页 view、thread selection view 或当前 picker 并 inline replace 原卡。其中 thread/history 等固定分页仍用 `page`，target/path picker / VS Code thread dropdown 的动态 byte-budget 分页改用 `cursor(start-index)`。
 - target picker 的会话标题只在显示时限长：下拉选项和切换进度最多 80 个字符，已选会话摘要最多 1000 个字符，含“名称过长，已截断”标记。完整语义原名、选项 `value` 与真实 thread 身份保持不变；分页继续按真实发送字节预算计算，避免单个长标题挤掉普通选项或确认按钮。
+- 目录、会话、历史、参数和结构化表单的下拉项铺满所在容器。工作区／会话卡的会话选项显示最近活动时间，已选且仍位于当前页时在控件下展示工作区完整路径、会话名和工作目录。超长详情带截断标记，详情和布局字段与分页共用卡片发送字节预算。
 - target picker 的 Target 页在打开时冻结完整选项读模型，工作区/会话选择与翻页只做内存草稿更新并原位替换，不在 callback 中重新读取 catalog、SQLite、Git 或目录；草稿使用已规范化的选项身份、冻结的默认选择和工作区 context，不在共用 admission 或 UI 投影中再次解析 host 路径/符号链接；owner、freshness、catalog provenance 仍实时校验。最终确认在真实 host 校验边界解析 API/表单传入的路径别名（包括 Windows 8.3 与符号链接），再读取实时选项与接管条件，旧目标不可继续确认。表单页面、owner/freshness 校验、回调 schema、确认/失败结果的原卡收口规则不变。
   - daemon 对 Target 页选择/翻页及其失效回调走 UI-only ingress episode：保留 lifecycle、owner、upgrade/turn-patch 门禁与 App 锁内顺序处理，返回同步 replacement；不构造无关 SurfaceSnapshot，不触发 group auto-resume，不执行全局 resume/profile/bot/room/context 持久化或 Git exclude 同步。已存在 surface 上的旧生命周期回调也不为错误提示额外执行 status/snapshot 和持久化。不增加 early ACK、后台动作队列或新的恢复生命周期。
 - 工作区/会话 picker 的 typed 导航动作优先保持自身 UI intent；随卡回传的 `catalog_family_id` 只用于来源/能力校验，不再被 workspace command binding 当作 `/list`、`/use` 或 `/useall` launcher 重放。失效 ID、过期或已结束 picker 的导航重试同样通过现有 owner/freshness 拒绝，不为拒绝结果重新解析 host 路径。

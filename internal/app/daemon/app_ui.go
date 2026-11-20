@@ -549,9 +549,12 @@ func (a *App) queueGatewayFailureNotice(event eventcontract.Event, err error) {
 	})
 	var apiErr *feishu.APIError
 	if errors.As(err, &apiErr) && apiErr != nil &&
-		apiErr.API == "im.v1.message.patch" && apiErr.Code == 230001 &&
-		strings.EqualFold(strings.TrimSpace(apiErr.Msg), "This message is NOT a card") {
-		problem.Retryable = false
+		apiErr.API == "im.v1.message.patch" && apiErr.Code == 230001 {
+		message := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(apiErr.Msg), "."))
+		const notACard = "this message is not a card"
+		if message == notACard || strings.HasSuffix(message, ", ext="+notACard) {
+			problem.Retryable = false
+		}
 	}
 	problem.Message += "请先查询当前状态确认操作结果，勿重复提交原操作。"
 	notice := orchestrator.GlobalRuntimeGatewayApplyFailureNotice(problem)

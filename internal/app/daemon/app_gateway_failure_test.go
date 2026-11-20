@@ -244,6 +244,13 @@ func TestQueueGatewayFailureNoticeRetryabilityAndSafeGuidance(t *testing.T) {
 			}),
 		},
 		{
+			name: "non-card patch from Feishu extended reason",
+			err: &feishu.APIError{
+				API: "im.v1.message.patch", Code: 230001,
+				Msg: "Your request contains an invalid request parameter, ext=This message is NOT a card.",
+			},
+		},
+		{
 			name: "unclassified parameter error",
 			err: &feishu.APIError{
 				API: "im.v1.message.patch", Code: 230001, Msg: "unknown parameter error",

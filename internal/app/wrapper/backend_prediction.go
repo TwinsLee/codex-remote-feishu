@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
-	"net/http"
 	"slices"
 	"strings"
 	"time"
@@ -36,7 +35,7 @@ type predictionRPCResponse struct {
 }
 
 func newPredictionRuntime() *predictionRuntime {
-	return &predictionRuntime{jobs: make(map[string]*predictionJob), pending: make(map[string]chan predictionRPCResponse), cache: make(map[string]predictionConfigCache), httpClient: &http.Client{}, now: time.Now, sample: rand.Float64, desktopContext: readPredictionDesktopContext}
+	return &predictionRuntime{jobs: make(map[string]*predictionJob), pending: make(map[string]chan predictionRPCResponse), cache: make(map[string]predictionConfigCache), httpClient: newPredictionHTTPClient(), now: time.Now, sample: rand.Float64, desktopContext: readPredictionDesktopContext}
 }
 
 // HandlePrediction returns immediately so native preparation never blocks relay commands.

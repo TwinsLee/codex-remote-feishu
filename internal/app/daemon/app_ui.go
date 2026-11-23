@@ -59,7 +59,12 @@ func (a *App) handleUIEventsLocked(ctx context.Context, events []eventcontract.E
 				summarizeRemoteStatuses(a.service.ActiveRemoteTurns()),
 				event.Command.Origin.MessageID,
 			)
-			if event.Command.Kind == agentproto.CommandReviewStart {
+			if event.QueuedPrompt != nil {
+				if !a.service.BindQueuedPredictionPrompt(event.SurfaceSessionID, *event.QueuedPrompt, *event.Command) {
+					continue
+				}
+				instanceID = event.QueuedPrompt.InstanceID
+			} else if event.Command.Kind == agentproto.CommandReviewStart {
 				a.service.BindPendingReviewStartCommand(event.SurfaceSessionID, event.Command.CommandID)
 			} else if event.Command.Kind == agentproto.CommandThreadShellCommand {
 				a.service.BindPendingShellCommand(event.SurfaceSessionID, event.Command.CommandID)

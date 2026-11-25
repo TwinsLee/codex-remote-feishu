@@ -262,7 +262,7 @@ func (s *Service) pathPickerOwnerCardMessageID(surface *state.SurfaceConsoleReco
 	return strings.TrimSpace(flow.MessageID)
 }
 
-func (s *Service) threadHistoryViewEvent(surface *state.SurfaceConsoleRecord, view control.FeishuThreadHistoryView, inline bool, sourceMessageID string) eventcontract.Event {
+func (s *Service) threadHistoryViewEvent(surface *state.SurfaceConsoleRecord, view control.FeishuThreadHistoryView, sourceMessageID string) eventcontract.Event {
 	return surfaceEventFromPayload(
 		surface,
 		eventcontract.ThreadHistoryPayload{
@@ -270,7 +270,6 @@ func (s *Service) threadHistoryViewEvent(surface *state.SurfaceConsoleRecord, vi
 			Context: s.buildFeishuThreadHistoryContextFromView(surface, view),
 		},
 		eventcontract.EventMeta{
-			InlineReplaceMode:    inlineReplaceMode(inline),
 			SourceMessageID:      strings.TrimSpace(sourceMessageID),
 			SourceMessagePreview: "",
 		},

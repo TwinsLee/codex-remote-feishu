@@ -121,7 +121,7 @@ func TestResolveFeishuFrontstageActionContractInlineViewActionSet(t *testing.T) 
 		{
 			name:   "bare history",
 			action: Action{Kind: ActionShowHistory, Text: "/history"},
-			want:   true,
+			want:   false,
 		},
 		{
 			name:   "parameter apply",
@@ -191,12 +191,12 @@ func TestResolveFeishuFrontstageActionContractInlineViewActionSet(t *testing.T) 
 		{
 			name:   "history page navigation",
 			action: Action{Kind: ActionHistoryPage, PickerID: "history-1", Page: 1},
-			want:   true,
+			want:   false,
 		},
 		{
 			name:   "history detail navigation",
 			action: Action{Kind: ActionHistoryDetail, PickerID: "history-1", TurnID: "turn-1"},
-			want:   true,
+			want:   false,
 		},
 		{
 			name:   "request step navigation",

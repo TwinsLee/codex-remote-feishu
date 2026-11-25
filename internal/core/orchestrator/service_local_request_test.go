@@ -700,8 +700,8 @@ func TestRespondRequestDispatchesCommandAndClearsOnResolve(t *testing.T) {
 		MessageID:        "om-card-1",
 		Request:          testRequestAction("req-1", "", "accept", nil, 0),
 	})
-	if len(events) != 2 || !events[0].InlineReplaceCurrentCard || events[1].Command == nil {
-		t.Fatalf("expected sealed request replacement plus one agent command event, got %#v", events)
+	if len(events) != 2 || events[0].InlineReplaceCurrentCard || events[0].RequestView == nil || !events[0].RequestView.Sealed || events[1].Command == nil {
+		t.Fatalf("expected sealed card update plus one agent command event, got %#v", events)
 	}
 	prompt := requestPromptFromEvent(t, events[0])
 	if !prompt.Sealed || prompt.Phase != "waiting_dispatch" {
@@ -779,8 +779,8 @@ func TestRespondRequestAcceptForSessionDispatchesDecision(t *testing.T) {
 		MessageID:        "om-card-1",
 		Request:          testRequestAction("req-1", "", "acceptForSession", nil, 0),
 	})
-	if len(events) != 2 || !events[0].InlineReplaceCurrentCard || events[1].Command == nil {
-		t.Fatalf("expected sealed request replacement plus one agent command event, got %#v", events)
+	if len(events) != 2 || events[0].InlineReplaceCurrentCard || events[0].RequestView == nil || !events[0].RequestView.Sealed || events[1].Command == nil {
+		t.Fatalf("expected sealed card update plus one agent command event, got %#v", events)
 	}
 	prompt := requestPromptFromEvent(t, events[0])
 	if !prompt.Sealed || prompt.Phase != "waiting_dispatch" {
@@ -897,8 +897,8 @@ func TestRespondRequestUserInputOptionDispatchesAnswersAndKeepsPendingStateUntil
 			"model": []string{"gpt-5.5"},
 		},
 	})
-	if len(events) != 2 || !events[0].InlineReplaceCurrentCard || events[1].Command == nil {
-		t.Fatalf("expected sealed inline replacement plus one agent command event, got %#v", events)
+	if len(events) != 2 || events[0].InlineReplaceCurrentCard || events[0].RequestView == nil || !events[0].RequestView.Sealed || events[1].Command == nil {
+		t.Fatalf("expected sealed card update plus one agent command event, got %#v", events)
 	}
 	prompt := requestPromptFromEvent(t, events[0])
 	if !prompt.Sealed {
@@ -1047,7 +1047,7 @@ func TestRespondRequestUserInputSavesPartialAnswersUntilComplete(t *testing.T) {
 			"effort": {"high"},
 		},
 	})
-	if len(events) != 2 || !events[0].InlineReplaceCurrentCard || events[1].Command == nil {
+	if len(events) != 2 || events[0].InlineReplaceCurrentCard || events[0].RequestView == nil || !events[0].RequestView.Sealed || events[1].Command == nil {
 		t.Fatalf("expected final answer to seal current card and dispatch command, got %#v", events)
 	}
 	prompt = requestPromptFromEvent(t, events[0])
@@ -1131,7 +1131,7 @@ func TestRespondRequestUserInputMergesSavedOptionWithFormTextAnswer(t *testing.T
 			"notes": {"请用中文回复"},
 		},
 	})
-	if len(events) != 2 || !events[0].InlineReplaceCurrentCard || events[1].Command == nil {
+	if len(events) != 2 || events[0].InlineReplaceCurrentCard || events[0].RequestView == nil || !events[0].RequestView.Sealed || events[1].Command == nil {
 		t.Fatalf("expected merged submit to seal current card and dispatch command, got %#v", events)
 	}
 	prompt = requestPromptFromEvent(t, events[0])
@@ -1212,7 +1212,7 @@ func TestRespondRequestUserInputSkipOptionalDispatchesStoredAnswers(t *testing.T
 			RequestRevision: 2,
 		},
 	})
-	if len(events) != 2 || !events[0].InlineReplaceCurrentCard || events[1].Command == nil {
+	if len(events) != 2 || events[0].InlineReplaceCurrentCard || events[0].RequestView == nil || !events[0].RequestView.Sealed || events[1].Command == nil {
 		t.Fatalf("expected skipping optional question to seal card and dispatch response, got %#v", events)
 	}
 	prompt = requestPromptFromEvent(t, events[0])
@@ -1279,7 +1279,7 @@ func TestRespondRequestUserInputDispatchFailureRestoresPendingRequest(t *testing
 			"model": {"gpt-5.5"},
 		},
 	})
-	if len(events) != 2 || !events[0].InlineReplaceCurrentCard || events[1].Command == nil {
+	if len(events) != 2 || events[0].InlineReplaceCurrentCard || events[0].RequestView == nil || !events[0].RequestView.Sealed || events[1].Command == nil {
 		t.Fatalf("expected submit to seal current card and dispatch a command, got %#v", events)
 	}
 	restore := svc.HandleCommandDispatchFailure("surface-1", events[1].Command.CommandID, errors.New("relay unavailable"))
@@ -1412,7 +1412,7 @@ func TestRespondRequestUserInputCommandRejectedRestoresPendingRequest(t *testing
 			"model": {"gpt-5.5"},
 		},
 	})
-	if len(events) != 2 || !events[0].InlineReplaceCurrentCard || events[1].Command == nil {
+	if len(events) != 2 || events[0].InlineReplaceCurrentCard || events[0].RequestView == nil || !events[0].RequestView.Sealed || events[1].Command == nil {
 		t.Fatalf("expected submit to seal current card and dispatch a command, got %#v", events)
 	}
 	restore := svc.HandleCommandRejected("inst-1", agentproto.CommandAck{

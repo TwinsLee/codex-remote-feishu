@@ -47,7 +47,7 @@ func (s *Service) openThreadHistory(surface *state.SurfaceConsoleRecord, sourceM
 	}
 	s.setActiveOwnerCardFlow(surface, flow)
 	s.setActiveThreadHistory(surface, record)
-	return s.startThreadHistoryQuery(surface, inst, flow, record, sourceMessageID, inline)
+	return s.startThreadHistoryQuery(surface, inst, flow, record, sourceMessageID)
 }
 
 func (s *Service) handleThreadHistoryPage(surface *state.SurfaceConsoleRecord, pickerID string, page int, actorUserID, sourceMessageID string, inline bool) []eventcontract.Event {
@@ -70,7 +70,7 @@ func (s *Service) handleThreadHistoryPage(surface *state.SurfaceConsoleRecord, p
 	if inline {
 		flow.MessageID = strings.TrimSpace(sourceMessageID)
 	}
-	return s.startThreadHistoryQuery(surface, inst, flow, record, sourceMessageID, inline)
+	return s.startThreadHistoryQuery(surface, inst, flow, record, sourceMessageID)
 }
 
 func (s *Service) handleThreadHistoryDetail(surface *state.SurfaceConsoleRecord, pickerID, turnID, actorUserID, sourceMessageID string, inline bool) []eventcontract.Event {
@@ -93,33 +93,29 @@ func (s *Service) handleThreadHistoryDetail(surface *state.SurfaceConsoleRecord,
 	if inline {
 		flow.MessageID = strings.TrimSpace(sourceMessageID)
 	}
-	return s.startThreadHistoryQuery(surface, inst, flow, record, sourceMessageID, inline)
+	return s.startThreadHistoryQuery(surface, inst, flow, record, sourceMessageID)
 }
 
-func (s *Service) startThreadHistoryQuery(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, flow *activeOwnerCardFlowRecord, record *activeThreadHistoryRecord, sourceMessageID string, inline bool) []eventcontract.Event {
+func (s *Service) startThreadHistoryQuery(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, flow *activeOwnerCardFlowRecord, record *activeThreadHistoryRecord, sourceMessageID string) []eventcontract.Event {
 	if surface == nil || inst == nil || flow == nil || record == nil {
 		return nil
 	}
 	view := s.buildThreadHistoryLoadingView(surface, inst, flow, record)
-	if inline {
-		view.MessageID = ""
-		if sourceMessageID = strings.TrimSpace(sourceMessageID); sourceMessageID != "" {
-			flow.MessageID = sourceMessageID
-		}
-	}
-	events := []eventcontract.Event{s.threadHistoryViewEvent(surface, view, inline, sourceMessageID)}
+	events := []eventcontract.Event{s.threadHistoryViewEvent(surface, view, sourceMessageID)}
 	events = append(events, eventcontract.Event{
 		Kind:             eventcontract.KindDaemonCommand,
 		GatewayID:        surface.GatewayID,
 		SurfaceSessionID: surface.SurfaceSessionID,
 		SourceMessageID:  sourceMessageID,
 		DaemonCommand: &control.DaemonCommand{
-			Kind:             control.DaemonCommandThreadHistoryRead,
-			GatewayID:        surface.GatewayID,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			SourceMessageID:  sourceMessageID,
-			InstanceID:       inst.InstanceID,
-			ThreadID:         record.ThreadID,
+			Kind:                  control.DaemonCommandThreadHistoryRead,
+			GatewayID:             surface.GatewayID,
+			SurfaceSessionID:      surface.SurfaceSessionID,
+			SourceMessageID:       sourceMessageID,
+			InstanceID:            inst.InstanceID,
+			ThreadID:              record.ThreadID,
+			PickerID:              flow.FlowID,
+			ThreadHistoryRevision: flow.Revision,
 		},
 	})
 	return events
@@ -172,6 +168,15 @@ func (s *Service) RecordThreadHistoryMessage(surfaceID, pickerID, messageID stri
 	s.RecordOwnerCardFlowMessage(surfaceID, pickerID, messageID)
 }
 
+func (s *Service) IsCurrentThreadHistoryQuery(surfaceID, instanceID, pickerID string, revision int) bool {
+	surface := s.root.Surfaces[surfaceID]
+	flow := s.activeOwnerCardFlow(surface)
+	return surface != nil && surface.AttachedInstanceID == instanceID &&
+		flow != nil && flow.Kind == ownerCardFlowKindThreadHistory &&
+		flow.FlowID == pickerID && flow.Revision == revision &&
+		flow.Phase == ownerCardFlowPhaseLoading && flow.ExpiresAt.After(s.now())
+}
+
 func (s *Service) HandleSurfaceThreadHistoryLoaded(surfaceID string) []eventcontract.Event {
 	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
 	flow := s.activeOwnerCardFlow(surface)
@@ -183,12 +188,12 @@ func (s *Service) HandleSurfaceThreadHistoryLoaded(surfaceID string) []eventcont
 	if inst == nil || threadID == "" || threadID != record.ThreadID {
 		view := s.buildThreadHistoryErrorView(surface, nil, flow, record, xutil.FirstNonEmpty(noticeCode, "history_expired"), xutil.FirstNonEmpty(noticeText, "这张历史卡片已经失效，请重新发送 /history。"))
 		s.clearThreadHistoryRuntime(surface)
-		return []eventcontract.Event{s.threadHistoryViewEvent(surface, view, false, "")}
+		return []eventcontract.Event{s.threadHistoryViewEvent(surface, view, "")}
 	}
 	flow.Phase = ownerCardFlowPhaseResolved
 	bumpOwnerCardFlowRevision(flow)
 	view := s.buildThreadHistoryResolvedView(surface, inst, flow, record)
-	return []eventcontract.Event{s.threadHistoryViewEvent(surface, view, false, "")}
+	return []eventcontract.Event{s.threadHistoryViewEvent(surface, view, "")}
 }
 
 func (s *Service) HandleSurfaceThreadHistoryFailure(surfaceID, code, text string) []eventcontract.Event {
@@ -211,7 +216,7 @@ func (s *Service) HandleSurfaceThreadHistoryFailure(surfaceID, code, text string
 	flow.Phase = ownerCardFlowPhaseError
 	bumpOwnerCardFlowRevision(flow)
 	view := s.buildThreadHistoryErrorView(surface, nil, flow, record, code, text)
-	return []eventcontract.Event{s.threadHistoryViewEvent(surface, view, false, "")}
+	return []eventcontract.Event{s.threadHistoryViewEvent(surface, view, "")}
 }
 
 func (s *Service) buildThreadHistoryLoadingView(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, flow *activeOwnerCardFlowRecord, record *activeThreadHistoryRecord) control.FeishuThreadHistoryView {

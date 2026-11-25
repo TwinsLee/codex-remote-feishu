@@ -77,8 +77,8 @@ func TestRespondPermissionsRequestBuildsStructuredGrantPayload(t *testing.T) {
 		Request:          testRequestAction("req-perm-1", "permissions_request_approval", "acceptForSession", nil, 0),
 	})
 
-	if len(events) != 2 || !events[0].InlineReplaceCurrentCard || events[1].Command == nil {
-		t.Fatalf("expected sealed request replacement plus one request respond command, got %#v", events)
+	if len(events) != 2 || events[0].InlineReplaceCurrentCard || events[0].RequestView == nil || !events[0].RequestView.Sealed || events[1].Command == nil {
+		t.Fatalf("expected sealed card update plus one request respond command, got %#v", events)
 	}
 	prompt := requestPromptFromEvent(t, events[0])
 	if !prompt.Sealed || prompt.Phase != "waiting_dispatch" {
@@ -138,8 +138,8 @@ func TestRespondMCPElicitationFormBuildsStructuredResponse(t *testing.T) {
 		},
 	})
 
-	if len(events) != 2 || !events[0].InlineReplaceCurrentCard || events[1].Command == nil {
-		t.Fatalf("expected sealed inline replacement plus one mcp request respond command, got %#v", events)
+	if len(events) != 2 || events[0].InlineReplaceCurrentCard || events[0].RequestView == nil || !events[0].RequestView.Sealed || events[1].Command == nil {
+		t.Fatalf("expected sealed card update plus one mcp request respond command, got %#v", events)
 	}
 	prompt := requestPromptFromEvent(t, events[0])
 	if !prompt.Sealed {
@@ -240,8 +240,8 @@ func TestRespondMCPElicitationURLAcceptBuildsContinuePayload(t *testing.T) {
 		Request:          testRequestAction("req-mcp-url-1", "mcp_server_elicitation", "accept", nil, 0),
 	})
 
-	if len(events) != 2 || !events[0].InlineReplaceCurrentCard || events[1].Command == nil {
-		t.Fatalf("expected sealed request replacement plus one mcp url respond command, got %#v", events)
+	if len(events) != 2 || events[0].InlineReplaceCurrentCard || events[0].RequestView == nil || !events[0].RequestView.Sealed || events[1].Command == nil {
+		t.Fatalf("expected sealed card update plus one mcp url respond command, got %#v", events)
 	}
 	prompt := requestPromptFromEvent(t, events[0])
 	if !prompt.Sealed || prompt.Phase != "waiting_dispatch" {
@@ -293,8 +293,8 @@ func TestMCPElicitationToolApprovalUsesDedicatedSemanticKindAndSessionMeta(t *te
 		MessageID:        "om-card-4",
 		Request:          testRequestAction("req-mcp-approval-1", "mcp_server_elicitation", "acceptForSession", nil, request.CardRevision),
 	})
-	if len(events) != 2 || !events[0].InlineReplaceCurrentCard || events[1].Command == nil {
-		t.Fatalf("expected sealed inline replacement plus one mcp approval respond command, got %#v", events)
+	if len(events) != 2 || events[0].InlineReplaceCurrentCard || events[0].RequestView == nil || !events[0].RequestView.Sealed || events[1].Command == nil {
+		t.Fatalf("expected sealed card update plus one mcp approval respond command, got %#v", events)
 	}
 	response := events[1].Command.Request.Response
 	if response["action"] != "accept" {

@@ -673,6 +673,7 @@ type DaemonCommand struct {
 	FromCardAction            bool
 	PickerID                  string
 	OptionID                  string
+	ThreadHistoryRevision     int
 	InstanceID                string
 	ThreadID                  string
 	ThreadTitle               string

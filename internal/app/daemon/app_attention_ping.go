@@ -45,6 +45,9 @@ func (a *App) requestAttentionAnnotationCandidateLocked(event eventcontract.Even
 		return eventcontract.AttentionAnnotation{}, ""
 	}
 	request := requestPayload.View
+	if request.Sealed && strings.TrimSpace(request.MessageID) != "" {
+		return eventcontract.AttentionAnnotation{}, ""
+	}
 	text, ok := attentionRequestPingText(request.SemanticKind, request.RequestType)
 	if !ok {
 		return eventcontract.AttentionAnnotation{}, ""

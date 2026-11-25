@@ -86,7 +86,7 @@ func TestPendingRequestsRenderSeriallyAndPromoteNextOnResolve(t *testing.T) {
 		MessageID:        "om-card-1",
 		Request:          testRequestAction("req-1", "approval", "accept", nil, 0),
 	})
-	if len(dispatch) != 2 || !dispatch[0].InlineReplaceCurrentCard || dispatch[1].Command == nil {
+	if len(dispatch) != 2 || dispatch[0].InlineReplaceCurrentCard || dispatch[0].RequestView == nil || !dispatch[0].RequestView.Sealed || dispatch[1].Command == nil {
 		t.Fatalf("expected sealed first prompt plus request.respond command, got %#v", dispatch)
 	}
 	if prompt := requestPromptFromEvent(t, dispatch[0]); prompt.RequestID != "req-1" || prompt.Phase != frontstagecontract.PhaseWaitingDispatch {

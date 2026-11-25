@@ -74,6 +74,8 @@ type pendingThreadHistoryRead struct {
 	SurfaceSessionID string
 	InstanceID       string
 	ThreadID         string
+	PickerID         string
+	Revision         int
 }
 
 type pendingMCPOAuthLogin struct {

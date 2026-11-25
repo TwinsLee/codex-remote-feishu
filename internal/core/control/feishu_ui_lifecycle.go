@@ -170,6 +170,10 @@ func AllowsCommandCardResultReplacement(action Action) bool {
 }
 
 func inlineReplaceableFeishuUIIntentAction(action Action) bool {
+	switch action.Kind {
+	case ActionShowHistory, ActionHistoryPage, ActionHistoryDetail:
+		return false
+	}
 	if binding, ok := ResolveFeishuCommandBindingFromAction(action); ok {
 		if binding.Kind == FeishuCommandBindingConfigFlow && !isSingleTokenSlashCommand(action.Text) {
 			return true
@@ -214,9 +218,7 @@ func inlineReplaceableFeishuUIIntentAction(action Action) bool {
 		FeishuUIIntentTargetPickerPage,
 		FeishuUIIntentTargetPickerOpenPathPicker,
 		FeishuUIIntentTargetPickerCancel,
-		FeishuUIIntentTargetPickerBack,
-		FeishuUIIntentHistoryPage,
-		FeishuUIIntentHistoryDetail:
+		FeishuUIIntentTargetPickerBack:
 		return true
 	default:
 		return false

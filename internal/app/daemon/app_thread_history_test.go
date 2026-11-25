@@ -7,11 +7,10 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
-	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 func TestThreadHistoryDaemonCommandDispatchesAgentCommandAndStoresPending(t *testing.T) {
-	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app, _ := newCardOrderTestApp(t)
 	var sent []agentproto.Command
 	app.sendAgentCommand = func(instanceID string, command agentproto.Command) error {
 		if instanceID != "inst-1" {
@@ -21,13 +20,7 @@ func TestThreadHistoryDaemonCommandDispatchesAgentCommandAndStoresPending(t *tes
 		return nil
 	}
 
-	events := app.handleThreadHistoryDaemonCommand(control.DaemonCommand{
-		Kind:             control.DaemonCommandThreadHistoryRead,
-		SurfaceSessionID: "surface-1",
-		InstanceID:       "inst-1",
-		ThreadID:         "thread-1",
-		SourceMessageID:  "msg-1",
-	})
+	events := app.handleThreadHistoryDaemonCommand(threadHistoryTestCommand(t, app))
 	if len(events) != 0 {
 		t.Fatalf("expected no immediate UI events on success, got %#v", events)
 	}
@@ -39,27 +32,22 @@ func TestThreadHistoryDaemonCommandDispatchesAgentCommandAndStoresPending(t *tes
 	}
 }
 
-func TestThreadHistoryDaemonCommandDispatchFailureReturnsNotice(t *testing.T) {
-	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+func TestThreadHistoryDaemonCommandDispatchFailureReturnsErrorCard(t *testing.T) {
+	app, _ := newCardOrderTestApp(t)
 	app.sendAgentCommand = func(string, agentproto.Command) error {
 		return errors.New("relay unavailable")
 	}
 
-	events := app.handleThreadHistoryDaemonCommand(control.DaemonCommand{
-		Kind:             control.DaemonCommandThreadHistoryRead,
-		SurfaceSessionID: "surface-1",
-		InstanceID:       "inst-1",
-		ThreadID:         "thread-1",
-	})
-	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "history_query_dispatch_failed" {
-		t.Fatalf("expected dispatch failure notice, got %#v", events)
+	events := app.handleThreadHistoryDaemonCommand(threadHistoryTestCommand(t, app))
+	if len(events) != 1 || events[0].ThreadHistoryView == nil || events[0].ThreadHistoryView.NoticeCode != "history_query_dispatch_failed" {
+		t.Fatalf("expected dispatch failure card, got %#v", events)
 	}
 	if len(app.pendingThreadHistoryReads) != 0 {
 		t.Fatalf("expected no pending history requests after dispatch failure, got %#v", app.pendingThreadHistoryReads)
 	}
 }
 
-func TestThreadHistoryCommandRejectClearsPendingAndEmitsNotice(t *testing.T) {
+func TestThreadHistoryCommandRejectClearsPending(t *testing.T) {
 	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
 	app.pendingThreadHistoryReads["cmd-history-1"] = pendingThreadHistoryRead{
 		SurfaceSessionID: "surface-1",
@@ -94,19 +82,14 @@ func TestThreadHistoryCommandAcceptKeepsPendingUntilResult(t *testing.T) {
 }
 
 func TestThreadHistoryEventStoresResultOnSurface(t *testing.T) {
-	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
-	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
-	app.service.UpsertInstance(&state.InstanceRecord{
-		InstanceID: "inst-1",
-		Online:     true,
-		Threads: map[string]*state.ThreadRecord{
-			"thread-1": {ThreadID: "thread-1"},
-		},
-	})
+	app, _ := newCardOrderTestApp(t)
+	command := threadHistoryTestCommand(t, app)
 	app.pendingThreadHistoryReads["cmd-history-1"] = pendingThreadHistoryRead{
-		SurfaceSessionID: "surface-1",
-		InstanceID:       "inst-1",
-		ThreadID:         "thread-1",
+		SurfaceSessionID: command.SurfaceSessionID,
+		InstanceID:       command.InstanceID,
+		ThreadID:         command.ThreadID,
+		PickerID:         command.PickerID,
+		Revision:         command.ThreadHistoryRevision,
 	}
 
 	app.onEvents(context.Background(), "inst-1", []agentproto.Event{{
@@ -132,4 +115,18 @@ func TestThreadHistoryEventStoresResultOnSurface(t *testing.T) {
 	if history == nil || history.Thread.ThreadID != "thread-1" || len(history.Turns) != 1 {
 		t.Fatalf("expected stored surface history result, got %#v", history)
 	}
+}
+
+func threadHistoryTestCommand(t *testing.T, app *App) control.DaemonCommand {
+	t.Helper()
+	events := app.service.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowHistory,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-1",
+		Text:             "/history",
+	})
+	if len(events) != 2 || events[1].DaemonCommand == nil {
+		t.Fatalf("expected history query from /history, got %#v", events)
+	}
+	return *events[1].DaemonCommand
 }

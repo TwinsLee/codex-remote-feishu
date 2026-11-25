@@ -290,7 +290,8 @@ func TestHandleCronHelloReleasesAppLockDuringPromptSend(t *testing.T) {
 }
 
 func TestThreadHistoryDaemonCommandLockedReleasesAppLockDuringRelaySend(t *testing.T) {
-	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app, _ := newCardOrderTestApp(t)
+	command := threadHistoryTestCommand(t, app)
 	sender := &reentrantAppLockRelaySender{app: app}
 	app.sendAgentCommand = sender.send
 
@@ -299,13 +300,7 @@ func TestThreadHistoryDaemonCommandLockedReleasesAppLockDuringRelaySend(t *testi
 	go func() {
 		app.mu.Lock()
 		defer app.mu.Unlock()
-		events = app.handleThreadHistoryDaemonCommandLocked(control.DaemonCommand{
-			Kind:             control.DaemonCommandThreadHistoryRead,
-			SurfaceSessionID: "surface-1",
-			InstanceID:       "inst-1",
-			ThreadID:         "thread-1",
-			SourceMessageID:  "msg-1",
-		})
+		events = app.handleThreadHistoryDaemonCommandLocked(command)
 		close(done)
 	}()
 

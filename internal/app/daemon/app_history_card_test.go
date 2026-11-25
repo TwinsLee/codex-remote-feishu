@@ -5,12 +5,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func TestHandleGatewayActionReplacesHistoryCardAndContinuesQuery(t *testing.T) {
+func TestHandleGatewayActionPatchesHistoryCardBeforeQuery(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
 		PID:       42,
@@ -67,14 +68,12 @@ func TestHandleGatewayActionReplacesHistoryCardAndContinuesQuery(t *testing.T) {
 		},
 	})
 
-	if result == nil || result.ReplaceCurrentCard == nil {
-		t.Fatalf("expected inline history replacement result, got %#v", result)
+	if result != nil && result.ReplaceCurrentCard != nil {
+		t.Fatalf("callback must not replace the history card: %#v", result)
 	}
-	if result.ReplaceCurrentCard.CardTitle != "历史记录" {
-		t.Fatalf("unexpected history replacement card: %#v", result.ReplaceCurrentCard)
-	}
-	if len(gateway.operations) != 0 {
-		t.Fatalf("expected no appended gateway ops for inline loading card, got %#v", gateway.operations)
+	if len(gateway.operations) != 1 || gateway.operations[0].Kind != feishu.OperationUpdateCard ||
+		gateway.operations[0].MessageID != "om-card-1" || gateway.operations[0].CardTitle != "历史记录" {
+		t.Fatalf("expected one patch on the original card, got %#v", gateway.operations)
 	}
 	if len(sent) != 1 || sent[0].Kind != agentproto.CommandThreadHistoryRead || sent[0].Target.ThreadID != "thread-1" {
 		t.Fatalf("expected history query to continue after inline replacement, got %#v", sent)

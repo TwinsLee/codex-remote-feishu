@@ -158,8 +158,8 @@ func TestRespondRequestCancelDispatchesDecision(t *testing.T) {
 		MessageID:        "om-card-1",
 		Request:          testRequestAction("req-cmd-1", "", "cancel", nil, 0),
 	})
-	if len(events) != 2 || !events[0].InlineReplaceCurrentCard || events[1].Command == nil {
-		t.Fatalf("expected sealed request replacement plus one agent command event, got %#v", events)
+	if len(events) != 2 || events[0].InlineReplaceCurrentCard || events[0].RequestView == nil || !events[0].RequestView.Sealed || events[1].Command == nil {
+		t.Fatalf("expected sealed card update plus one agent command event, got %#v", events)
 	}
 	prompt := requestPromptFromEvent(t, events[0])
 	if !prompt.Sealed || prompt.Phase != "waiting_dispatch" {

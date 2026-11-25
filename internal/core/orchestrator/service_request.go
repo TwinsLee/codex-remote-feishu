@@ -809,7 +809,18 @@ func (s *Service) dispatchRequestResponse(surface *state.SurfaceConsoleRecord, r
 	bumpRequestCardRevision(request)
 	events := make([]eventcontract.Event, 0, 2)
 	if requestPromptRenderable(request.RequestType) {
-		events = append(events, s.requestPromptInlinePhaseEvent(surface, request, "", frontstagecontract.PhaseWaitingDispatch, xutil.FirstNonEmpty(strings.TrimSpace(statusText), requestPromptPendingDispatchStatusText(request))))
+		view := s.requestPromptView(request, "")
+		view.StatusText = xutil.FirstNonEmpty(strings.TrimSpace(statusText), requestPromptPendingDispatchStatusText(request))
+		view.MessageID = strings.TrimSpace(request.VisibleMessageID)
+		if view.MessageID == "" && control.ActionTargetsCurrentFeishuCard(action) {
+			view.MessageID = strings.TrimSpace(action.MessageID)
+		}
+		event := s.requestViewEvent(surface, view)
+		event.SourceMessageID = strings.TrimSpace(request.SourceMessageID)
+		if event.SourceMessageID != "" && view.MessageID == "" {
+			event.Meta.MessageDelivery = eventcontract.ReplyThreadAppendOnlyDelivery()
+		}
+		events = append(events, event)
 	}
 	events = append(events, eventcontract.Event{
 		Kind:             eventcontract.KindAgentCommand,

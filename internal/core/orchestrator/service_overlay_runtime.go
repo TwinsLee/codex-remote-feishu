@@ -190,7 +190,7 @@ func (s *Service) sealThreadHistoryForContextChange(surface *state.SurfaceConsol
 		overlayInvalidationText(cause, "这张历史卡片已失效，请重新发送 /history。"),
 	)
 	s.clearThreadHistoryRuntime(surface)
-	return []eventcontract.Event{s.threadHistoryViewEvent(surface, view, false, "")}
+	return []eventcontract.Event{s.threadHistoryViewEvent(surface, view, "")}
 }
 
 func (s *Service) sealReviewCommitPickerForContextChange(surface *state.SurfaceConsoleRecord, cause string) []eventcontract.Event {

@@ -1,8 +1,8 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-11-25`
-> Summary: 记录状态卡会话 ID、速度档位与历史查询、确认卡的投递顺序。
+> Updated: `2026-11-26`
+> Summary: 补充执行权限档位与恢复默认权限按钮的展示规则。
 
 ## 1. 文档定位
 
@@ -507,7 +507,7 @@ MCP request 卡片当前新增的可视语义：
 - bare `/autowhip`
 - bare `/autocontinue`
 - bare `/reasoning`
-- bare `/access`
+- bare `/access`。权限档位区显示「完全访问」和「需要时确认」。有飞书权限覆盖时，另一区显示「恢复默认权限」，按钮仍派发 `/access clear`。执行后「下条消息」显示恢复后的有效权限，「飞书覆盖」显示「无」。
 - bare `/plan`
 - bare `/model`
 - bare `/verbose`

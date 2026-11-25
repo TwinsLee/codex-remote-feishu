@@ -69,6 +69,41 @@ func TestAccessConfigPageShowsUnmappedObservedThreadAccess(t *testing.T) {
 	}
 }
 
+func TestAccessConfigPageSeparatesRestoringDefaultsFromPermissionModes(t *testing.T) {
+	view := FeishuCatalogConfigView{
+		CommandID:      FeishuCommandAccess,
+		CatalogBackend: agentproto.BackendCodex,
+		EffectiveValue: agentproto.AccessModeFullAccess,
+	}
+	page := BuildFeishuCommandConfigPageView(view)
+	if len(page.Sections) != 1 || page.Sections[0].Title != "权限档位" ||
+		len(page.Sections[0].Entries) != 1 || len(page.Sections[0].Entries[0].Buttons) != 2 {
+		t.Fatalf("expected only two permission modes with no override, got %#v", page.Sections)
+	}
+	modes := page.Sections[0].Entries[0].Buttons
+	if modes[0].CommandText != "/access full" || modes[1].CommandText != "/access confirm" {
+		t.Fatalf("expected full and confirm controls, got %#v", modes)
+	}
+	if text := configPageSummaryText(page); !strings.Contains(text, "下条消息\nfull_access") ||
+		!strings.Contains(text, "飞书覆盖\n无") {
+		t.Fatalf("expected effective default permission and no override, got %q", text)
+	}
+
+	view.OverrideValue = agentproto.AccessModeFullAccess
+	page = BuildFeishuCommandConfigPageView(view)
+	if len(page.Sections) != 2 || page.Sections[1].Title != "飞书权限覆盖" ||
+		len(page.Sections[1].Entries) != 1 || len(page.Sections[1].Entries[0].Buttons) != 1 {
+		t.Fatalf("expected a separate override section, got %#v", page.Sections)
+	}
+	reset := page.Sections[1].Entries[0].Buttons[0]
+	if reset.Label != "恢复默认权限" || reset.CommandText != "/access clear" || reset.Disabled {
+		t.Fatalf("expected the existing clear command on the restore button, got %#v", reset)
+	}
+	if !page.Sections[0].Entries[0].Buttons[0].Disabled {
+		t.Fatal("expected the full override to be marked as current")
+	}
+}
+
 func configPageSummaryText(page FeishuPageView) string {
 	var parts []string
 	for _, section := range page.SummarySections {

@@ -224,12 +224,31 @@ func accessPageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPag
 	if view.Sealed {
 		return sealedCommandPageViewForDefinition(def, view, bodySections, noticeSections)
 	}
-	return commandConfigPageView(def, view, bodySections, noticeSections, []CommandCatalogSection{{
-		Title: "立即应用",
-		Entries: []CommandCatalogEntry{{
-			Buttons: choiceButtonsFromOptions(def.Options, strings.TrimSpace(view.OverrideValue), ""),
-		}},
-	}})
+	override := strings.TrimSpace(view.OverrideValue)
+	if agentproto.NormalizeAccessMode(override) == agentproto.AccessModeFullAccess {
+		override = "full"
+	}
+	var modes, restore []CommandCatalogButton
+	for _, button := range choiceButtonsFromOptions(def.Options, override, "") {
+		if button.CommandText == "/access clear" {
+			if !button.Disabled {
+				restore = append(restore, button)
+			}
+			continue
+		}
+		modes = append(modes, button)
+	}
+	sections := []CommandCatalogSection{{
+		Title:   "权限档位",
+		Entries: []CommandCatalogEntry{{Buttons: modes}},
+	}}
+	if len(restore) != 0 {
+		sections = append(sections, CommandCatalogSection{
+			Title:   "飞书权限覆盖",
+			Entries: []CommandCatalogEntry{{Buttons: restore}},
+		})
+	}
+	return commandConfigPageView(def, view, bodySections, noticeSections, sections)
 }
 
 func planPageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageView {

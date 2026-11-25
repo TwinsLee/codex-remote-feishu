@@ -1796,29 +1796,41 @@ func TestProjectSnapshotNeutralizesPendingHeadlessThreadTitle(t *testing.T) {
 
 func TestProjectSnapshotShowsCurrentAndPendingCodexSpeed(t *testing.T) {
 	for _, tc := range []struct {
+		name    string
+		backend agentproto.Backend
+		thread  string
 		current string
 		pending string
 		want    string
-		next    bool
 	}{
-		{current: "default", pending: "fast", want: "速度档位：标准", next: true},
-		{current: "fast", want: "速度档位：Fast"},
-		{want: "速度档位：未确认"},
+		{name: "pending", backend: agentproto.BackendCodex, thread: "thread-1", current: "default", pending: "fast", want: "，速度 Fast"},
+		{name: "confirmed", backend: agentproto.BackendCodex, thread: "thread-1", current: "fast", want: "，速度 Fast"},
+		{name: "same pending", backend: agentproto.BackendCodex, thread: "thread-1", current: "fast", pending: "fast", want: "，速度 Fast"},
+		{name: "unconfirmed", backend: agentproto.BackendCodex, thread: "thread-1", want: "，速度 未确认"},
+		{name: "pending from unconfirmed", backend: agentproto.BackendCodex, thread: "thread-1", pending: "default", want: "，速度 标准"},
+		{name: "no selected thread", backend: agentproto.BackendCodex},
+		{name: "other backend", backend: agentproto.BackendClaude, thread: "thread-1"},
 	} {
-		p := NewProjector()
-		ops := p.ProjectEvent("chat-1", eventcontract.Event{
-			Kind: eventcontract.KindSnapshot,
-			Snapshot: &control.Snapshot{
-				Backend: agentproto.BackendCodex,
-				Attachment: control.AttachmentSummary{
-					InstanceID: "instance-1", SelectedThreadID: "thread-1",
-					CodexServiceTier: tc.current, PendingCodexServiceTier: tc.pending,
+		t.Run(tc.name, func(t *testing.T) {
+			p := NewProjector()
+			ops := p.ProjectEvent("chat-1", eventcontract.Event{
+				Kind: eventcontract.KindSnapshot,
+				Snapshot: &control.Snapshot{
+					Backend: tc.backend,
+					Attachment: control.AttachmentSummary{
+						InstanceID: "instance-1", SelectedThreadID: tc.thread,
+						CodexServiceTier: tc.current, PendingCodexServiceTier: tc.pending,
+					},
+					NextPrompt: control.PromptRouteSummary{
+						EffectiveModel: "gpt-6.2-sol", EffectiveReasoningEffort: "high", EffectiveAccessMode: "full",
+					},
 				},
-			},
+			})
+			rendered := renderedV2CardText(t, ops[0])
+			want := "下条飞书消息：Plan 关闭，模型 gpt-6.2-sol，推理 high" + tc.want + "，权限 full"
+			if !strings.Contains(rendered, want) || strings.Contains(rendered, "速度档位：") || strings.Contains(rendered, "下条消息的速度：") {
+				t.Fatalf("want %q in one line, got %s", want, rendered)
+			}
 		})
-		rendered := renderedV2CardText(t, ops[0])
-		if !strings.Contains(rendered, tc.want) || strings.Contains(rendered, "下条消息的速度：Fast") != tc.next {
-			t.Fatalf("unexpected speed state: %s", rendered)
-		}
 	}
 }

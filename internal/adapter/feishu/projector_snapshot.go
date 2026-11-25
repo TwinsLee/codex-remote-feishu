@@ -77,13 +77,6 @@ func projectSnapshotElements(snapshot control.Snapshot, daemonBinary, currentDir
 				lines = nil
 			}
 		}
-		if snapshot.Backend == agentproto.BackendCodex && snapshot.Attachment.SelectedThreadID != "" {
-			current, pending := snapshot.Attachment.CodexServiceTier, snapshot.Attachment.PendingCodexServiceTier
-			lines = append(lines, snapshotLine("速度档位", control.CodexServiceTierLabel(current)))
-			if pending != "" && pending != current {
-				lines = append(lines, snapshotLine("下条消息的速度", control.CodexServiceTierLabel(pending)))
-			}
-		}
 		if first := strings.TrimSpace(snapshot.Attachment.SelectedThreadFirstUserMessage); first != "" {
 			lines = append(lines, snapshotLine("会话起点", compactSnapshotStatusText(first, snapshotStatusPreviewLimit)))
 		}
@@ -102,7 +95,7 @@ func projectSnapshotElements(snapshot control.Snapshot, daemonBinary, currentDir
 		if snapshot.Attachment.PID > 0 {
 			lines = append(lines, snapshotLine("实例 PID", fmt.Sprintf("%d", snapshot.Attachment.PID)))
 		}
-		lines = append(lines, snapshotLine("下条飞书消息", formatSnapshotEffectivePromptPlain(snapshot.NextPrompt)))
+		lines = append(lines, snapshotLine("下条飞书消息", formatSnapshotEffectivePromptPlain(snapshot.NextPrompt, formatSnapshotPromptSpeed(snapshot))))
 		if snapshotShouldShowPromptCWD(snapshotCurrentDirectory(snapshot), snapshot.NextPrompt.CWD) {
 			lines = append(lines, snapshotLine("工作目录", strings.TrimSpace(snapshot.NextPrompt.CWD)))
 		}
@@ -270,24 +263,41 @@ func displaySnapshotAccessMode(value string) string {
 	return agentproto.DisplayAccessModeShort(value)
 }
 
-func formatSnapshotEffectivePromptPlain(summary control.PromptRouteSummary) string {
-	if summary.UsesLocalRequestedOverrides {
-		return formatSnapshotLocalRequestedPromptPlain(summary)
+func formatSnapshotPromptSpeed(snapshot control.Snapshot) string {
+	if snapshot.Backend != agentproto.BackendCodex || strings.TrimSpace(snapshot.Attachment.SelectedThreadID) == "" {
+		return ""
 	}
-	return strings.Join([]string{
+	tier := xutil.FirstNonEmpty(snapshot.Attachment.PendingCodexServiceTier, snapshot.Attachment.CodexServiceTier)
+	if tier == "" {
+		return "速度 未确认"
+	}
+	return "速度 " + control.CodexServiceTierLabel(tier)
+}
+
+func formatSnapshotEffectivePromptPlain(summary control.PromptRouteSummary, speed string) string {
+	if summary.UsesLocalRequestedOverrides {
+		return formatSnapshotLocalRequestedPromptPlain(summary, speed)
+	}
+	parts := []string{
 		"Plan " + displaySnapshotPlanMode(summary.EffectivePlanMode),
 		"模型 " + displaySnapshotValue(summary.EffectiveModel),
 		"推理 " + displaySnapshotValue(summary.EffectiveReasoningEffort),
-		"权限 " + displaySnapshotAccessMode(summary.EffectiveAccessMode),
-	}, "，")
+	}
+	if speed != "" {
+		parts = append(parts, speed)
+	}
+	return strings.Join(append(parts, "权限 "+displaySnapshotAccessMode(summary.EffectiveAccessMode)), "，")
 }
 
-func formatSnapshotLocalRequestedPromptPlain(summary control.PromptRouteSummary) string {
+func formatSnapshotLocalRequestedPromptPlain(summary control.PromptRouteSummary, speed string) string {
 	parts := []string{
 		snapshotOverridePart("模型", summary.OverrideModel, displaySnapshotValue),
 		snapshotOverridePart("推理", summary.OverrideReasoningEffort, displaySnapshotValue),
-		snapshotOverridePart("权限", summary.OverrideAccessMode, displaySnapshotAccessMode),
 	}
+	if speed != "" {
+		parts = append(parts, speed)
+	}
+	parts = append(parts, snapshotOverridePart("权限", summary.OverrideAccessMode, displaySnapshotAccessMode))
 	if summary.PlanModeOverrideSet {
 		parts = append(parts, "Plan "+displaySnapshotPlanMode(summary.OverridePlanMode))
 	} else {

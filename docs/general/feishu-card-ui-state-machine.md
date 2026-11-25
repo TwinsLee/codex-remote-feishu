@@ -18,7 +18,7 @@
 
 2026-08-15 #896 补充：`/goal` 是新增 config-flow slash command，完全复用现有命令卡体系：bare `/goal` 经现有命令解析与 freshness 校验，通过 `pageEvent` 回显 Goal 状态页；文字入口发送新卡，带有效当前卡片上下文的入口可原位更新。`/goal clear` 的确认/取消通过 `CommandText` 命令重放（`/goal clear --confirm`、`/goal`），复用现有 callback kind 与 `thread_id` / `instance_id` 字段，不新增 owner 分类、不改 `daemon_lifecycle_id` stamping。状态页按钮绑定 `CommandID=goal`，通过带有目标与 catalog 信息的 `CommandCatalogButtonCallbackAction` 实际投影；Goal 控制面不产生第二套卡片 carrier 或 freshness 规则。
 
-2026-08-15 #896 review 修复补充：确认卡/编辑表单打开时服务端暂存 Goal fingerprint，命令重放执行前比对、漂移 fail closed；goal 命令发送失败会清理 pending 并回错误卡；卡片入口触发的 loading 与结果卡通过 `MessageID + Patchable` 在同一 message 上 patch；错误页复用 config 命令 builder（非 sealed），失败原因不伪装成 no-goal 状态。
+2026-08-15 #896 review 修复补充：确认卡/编辑表单打开时服务端暂存 Goal fingerprint，命令重放执行前比对、漂移 fail closed；goal 命令发送失败会清理 pending 并回错误卡；卡片入口触发的异步操作仅通过 `MessageID + Patchable` 将结果或发送失败原位写回，避免较晚投递的处理中卡片覆盖结果；错误页复用 config 命令 builder（非 sealed），失败原因不伪装成 no-goal 状态。
 
 Goal 当前的回显约束：
 

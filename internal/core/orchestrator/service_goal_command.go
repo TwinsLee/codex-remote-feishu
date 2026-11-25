@@ -220,18 +220,13 @@ func (s *Service) issueGoalCommand(surface *state.SurfaceConsoleRecord, threadID
 		Action:     actionName,
 		MessageID:  sourceMessageID,
 	}
-	events := []eventcontract.Event{{
+	// Only the result updates the source card. The app-server may reply before
+	// command dispatch returns, so a separate loading patch can overwrite it.
+	return []eventcontract.Event{{
 		Kind:             eventcontract.KindAgentCommand,
 		SurfaceSessionID: surface.SurfaceSessionID,
 		Command:          command,
 	}}
-	if actionName != "get" && sourceMessageID != "" {
-		loading := goalLoadingPage(surface)
-		loading.MessageID = sourceMessageID
-		loading.Patchable = true
-		events = append(events, s.pageEvent(surface, loading))
-	}
-	return events
 }
 
 func (s *Service) failGoalUserCommand(surfaceID, commandID string, err error) []eventcontract.Event {
@@ -298,16 +293,6 @@ func (s *Service) applyGoalUserCommandResult(instanceID string, event agentproto
 		page.Patchable = true
 	}
 	return []eventcontract.Event{s.pageEvent(surface, page)}
-}
-
-func goalLoadingPage(surface *state.SurfaceConsoleRecord) control.FeishuPageView {
-	return control.FeishuPageView{
-		PageID:      control.FeishuCommandGoal,
-		CommandID:   control.FeishuCommandGoal,
-		Title:       "Goal",
-		StatusText:  "正在处理…",
-		Interactive: true,
-	}
 }
 
 func (s *Service) goalCommandFormPage(surface *state.SurfaceConsoleRecord, sub string) control.FeishuPageView {

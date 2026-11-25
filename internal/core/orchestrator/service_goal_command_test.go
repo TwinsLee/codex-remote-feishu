@@ -506,7 +506,7 @@ func TestGoalCommandMalformedBudgetFailsClosed(t *testing.T) {
 	}
 }
 
-func TestGoalCommandCardFlowPatchesLoadingAndResultOnSameMessage(t *testing.T) {
+func TestGoalCommandCardFlowPatchesOnlyResultOnSameMessage(t *testing.T) {
 	svc, surfaceID, instanceID := goalInterlockTestSetup(t)
 	statusPage := svc.goalStatusPage(svc.root.Surfaces[surfaceID], svc.root.Instances[instanceID].Threads["thread-1"].ThreadGoal)
 	cardAction := goalCardPayloadAction(surfaceID, &statusPage, "pause")
@@ -531,9 +531,8 @@ func TestGoalCommandCardFlowPatchesLoadingAndResultOnSameMessage(t *testing.T) {
 	if pause == nil {
 		t.Fatalf("expected pause command, got %#v", events)
 	}
-	loading := findPageEvent(events)
-	if loading == nil || loading.MessageID != "om-goal-card-1" || !loading.Patchable {
-		t.Fatalf("expected patchable loading card on source message, got %#v", loading)
+	if page := findPageEvent(events); page != nil {
+		t.Fatalf("an async Goal command must wait for its result before updating the card, got %#v", page)
 	}
 	result := svc.ApplyAgentEvent(instanceID, agentproto.Event{
 		Kind:      agentproto.EventThreadGoalCommandResult,

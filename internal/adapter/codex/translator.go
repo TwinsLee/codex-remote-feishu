@@ -42,6 +42,7 @@ type Translator struct {
 	threadListRefresh         *threadListRefreshSession
 	pendingThreadHistoryReads map[string]pendingThreadHistoryRead
 	pendingSuppressedResponse map[string]suppressedResponseContext
+	pendingLocalServiceTiers  map[string]localServiceTierRequest
 	pendingRequestTypes       map[string]agentproto.RequestType
 	pendingMCPOAuthLogins     map[string]pendingMCPOAuthLogin
 	pendingMCPOAuthLoginKeys  map[string]string
@@ -134,6 +135,7 @@ type suppressedResponseContext struct {
 	Action           string
 	ThreadID         string
 	SurfaceSessionID string
+	ServiceTier      string
 }
 
 type Result struct {
@@ -169,6 +171,7 @@ func NewTranslator(instanceID string) *Translator {
 		threadListBroker:           newThreadListBroker(),
 		pendingThreadHistoryReads:  map[string]pendingThreadHistoryRead{},
 		pendingSuppressedResponse:  map[string]suppressedResponseContext{},
+		pendingLocalServiceTiers:   map[string]localServiceTierRequest{},
 		pendingRequestTypes:        map[string]agentproto.RequestType{},
 		pendingMCPOAuthLogins:      map[string]pendingMCPOAuthLogin{},
 		pendingMCPOAuthLoginKeys:   map[string]string{},

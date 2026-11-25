@@ -318,6 +318,7 @@ func (s *Service) SetPrimaryBotPermissionChecker(checker PrimaryBotPermissionChe
 
 func (s *Service) ApplySurfaceAction(action control.Action) (result []eventcontract.Event) {
 	surface := s.ensureSurface(action)
+	defer clearStaleCodexServiceTierRequest(surface)
 	canceledPredictions := s.predictionActionPrelude(surface, action)
 	defer func() { result = append(canceledPredictions, result...) }()
 	if blocked := s.rejectInvalidBotCapabilitySettings(surface, action); blocked != nil {
@@ -463,6 +464,8 @@ func (s *Service) ApplySurfaceAction(action control.Action) (result []eventcontr
 		events = s.handleModelCommand(surface, action)
 	case control.ActionReasoningCommand:
 		events = s.handleReasoningCommand(surface, action)
+	case control.ActionFastCommand:
+		events = s.handleFastCommand(surface, action)
 	case control.ActionAccessCommand:
 		events = s.handleAccessCommand(surface, action)
 	case control.ActionPlanCommand:

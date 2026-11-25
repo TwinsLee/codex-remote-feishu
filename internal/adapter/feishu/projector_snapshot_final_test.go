@@ -1300,6 +1300,55 @@ func TestProjectSnapshotShowsAttachedWorkspaceWithoutThread(t *testing.T) {
 	}
 }
 
+func TestProjectSnapshotShowsFullSelectedSessionID(t *testing.T) {
+	const sessionID = "0195511a-f567-7e25-9105-d055f87c0f9c"
+	for _, test := range []struct {
+		name      string
+		threadID  string
+		title     string
+		routeMode string
+		want      string
+	}{
+		{
+			name:      "selected session",
+			threadID:  sessionID,
+			title:     "修复登录流程",
+			routeMode: "pinned",
+			want:      "当前输入目标：修复登录流程\n会话 ID：`" + sessionID + "`",
+		},
+		{
+			name:      "waiting for first message",
+			routeMode: "new_thread_ready",
+			want:      "当前输入目标：新建会话（等待首条消息）",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			projector := NewProjector()
+			ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+				Kind: eventcontract.KindSnapshot,
+				Snapshot: &control.Snapshot{
+					Attachment: control.AttachmentSummary{
+						InstanceID:          "inst-1",
+						SelectedThreadID:    test.threadID,
+						SelectedThreadTitle: test.title,
+						RouteMode:           test.routeMode,
+					},
+				},
+			})
+			if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+				t.Fatalf("unexpected ops: %#v", ops)
+			}
+			rendered := renderedV2CardText(t, ops[0])
+			if !strings.Contains(rendered, test.want) {
+				t.Fatalf("want %q in status, got %q", test.want, rendered)
+			}
+			if test.threadID == "" && strings.Contains(rendered, "会话 ID：") {
+				t.Fatalf("unexpected session ID before the session exists: %q", rendered)
+			}
+		})
+	}
+}
+
 func TestProjectSnapshotDisplaysAutoWhipSummary(t *testing.T) {
 	projector := NewProjector()
 	dueAt := time.Date(2026, 4, 9, 12, 0, 30, 0, time.FixedZone("CST", 8*3600))
@@ -1742,5 +1791,34 @@ func TestProjectSnapshotNeutralizesPendingHeadlessThreadTitle(t *testing.T) {
 	rendered := renderedV2CardText(t, ops[0])
 	if !strings.Contains(rendered, "- 待恢复 `会话`") {
 		t.Fatalf("expected pending headless title to stay literal in plain_text, got %q", rendered)
+	}
+}
+
+func TestProjectSnapshotShowsCurrentAndPendingCodexSpeed(t *testing.T) {
+	for _, tc := range []struct {
+		current string
+		pending string
+		want    string
+		next    bool
+	}{
+		{current: "default", pending: "fast", want: "速度档位：标准", next: true},
+		{current: "fast", want: "速度档位：Fast"},
+		{want: "速度档位：未确认"},
+	} {
+		p := NewProjector()
+		ops := p.ProjectEvent("chat-1", eventcontract.Event{
+			Kind: eventcontract.KindSnapshot,
+			Snapshot: &control.Snapshot{
+				Backend: agentproto.BackendCodex,
+				Attachment: control.AttachmentSummary{
+					InstanceID: "instance-1", SelectedThreadID: "thread-1",
+					CodexServiceTier: tc.current, PendingCodexServiceTier: tc.pending,
+				},
+			},
+		})
+		rendered := renderedV2CardText(t, ops[0])
+		if !strings.Contains(rendered, tc.want) || strings.Contains(rendered, "下条消息的速度：Fast") != tc.next {
+			t.Fatalf("unexpected speed state: %s", rendered)
+		}
 	}
 }

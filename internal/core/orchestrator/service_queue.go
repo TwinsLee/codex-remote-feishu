@@ -415,6 +415,17 @@ func (s *Service) promptSendCommandAndGuardEventsFromQueueItem(surface *state.Su
 	if !state.BackendAcceptsFeishuPlanOverride(backend) {
 		planModeOverride = ""
 	}
+	guardEvents := []eventcontract.Event{}
+	serviceTier := ""
+	if backend == agentproto.BackendCodex && item.SourceKind == state.QueueItemSourceUser && !item.AsyncUserInput &&
+		!dispatchPlan.InternalHelper && dispatchPlan.Purpose == "" && dispatchPlan.ExecutionMode == agentproto.PromptExecutionModeResumeExisting {
+		serviceTier = pendingCodexServiceTier(surface, surface.AttachedInstanceID, dispatchPlan.ExecutionThreadID)
+		if serviceTier == "fast" && s.codexModelDoesNotOfferFast(surface, inst, dispatchPlan.ExecutionThreadID, dispatchPlan.CWD, overrides) {
+			serviceTier = ""
+			surface.PendingCodexServiceTier = state.CodexServiceTierRequest{}
+			guardEvents = append(guardEvents, fastModelUnsupportedNotice(surface)...)
+		}
+	}
 	command := &agentproto.Command{
 		Kind: agentproto.CommandPromptSend,
 		Origin: agentproto.Origin{
@@ -432,10 +443,10 @@ func (s *Service) promptSendCommandAndGuardEventsFromQueueItem(surface *state.Su
 			ReasoningEffort: overrides.ReasoningEffort,
 			AccessMode:      overrides.AccessMode,
 			PlanMode:        planModeOverride,
+			ServiceTier:     serviceTier,
 		},
 		CodexResume: CodexResumePolicyForThread(item.CodexConnectionContract, item.CodexThreadPolicy, codexResumeTargetThread(inst, dispatchPlan)),
 	}
-	guardEvents := []eventcontract.Event{}
 	if guard.DroppedModel {
 		guardEvents = append(guardEvents, modelOverrideGuardNoticeEvent(surface, guard))
 	}

@@ -355,6 +355,7 @@ type PromptOverrides struct {
 	ReasoningEffort string `json:"reasoningEffort,omitempty"`
 	AccessMode      string `json:"accessMode,omitempty"`
 	PlanMode        string `json:"planMode,omitempty"`
+	ServiceTier     string `json:"serviceTier,omitempty"`
 }
 
 type Request struct {

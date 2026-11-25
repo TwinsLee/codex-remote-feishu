@@ -40,6 +40,7 @@ const (
 	ActionVSCodeMigrateCommand        ActionKind = "surface.command.vscode_migrate"
 	ActionUpgradeOwnerFlow            ActionKind = "surface.command.upgrade_owner_flow"
 	ActionModelCommand                ActionKind = "surface.command.model"
+	ActionFastCommand                 ActionKind = "surface.command.fast"
 	ActionReasoningCommand            ActionKind = "surface.command.reasoning"
 	ActionAccessCommand               ActionKind = "surface.command.access"
 	ActionPlanCommand                 ActionKind = "surface.command.plan"
@@ -249,6 +250,8 @@ type AttachmentSummary struct {
 	SelectedThreadLastUserMessage  string
 	SelectedThreadModelReroute     *agentproto.TurnModelReroute
 	SelectedThreadAgeText          string
+	CodexServiceTier               string
+	PendingCodexServiceTier        string
 	RouteMode                      string
 	Abandoning                     bool
 }

@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-11-23`
-> Summary: 补充下一句建议原会话发送、启动失败恢复与运行通知并发投递规则。
+> Updated: `2026-11-25`
+> Summary: 补充 Codex 会话速度档位、下一句建议与异步投递规则。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -265,6 +265,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
    1. headless Codex 主链的 queue item 仍会冻结最终 effective model / access；reasoning 只冻结用户显式 override，空 `ReasoningEffort` 表示自动，不再把 backend 全局默认 `xhigh`、thread observed/base reasoning 或动态目录里的 `defaultReasoningEffort` 当成要下发的 prompt override。
    2. Codex API Profile 声明的模型和推理强度会作为 profile base 进入下一轮 prompt config summary 与 queue freeze；fixed/dynamic 只决定是否允许用户再通过 `model.list` catalog 覆盖。Codex `/model` 与 `/reasoning` 会先按当前 Codex Profile 判定模型目录模式：native/OAuth、未配置模型的 API Profile、模型名看起来属于 GPT/OpenAI 系的 API Profile，以及 DeepSeek/MiMo endpoint 或 `deepseek-` / `mimo-` 模型名前缀识别出的 catalog-backed API Profile，继续使用当前 instance-scoped `model.list` 目录。DeepSeek/MiMo API Profile 的目录由 daemon 在启动 child 前写入 Remote 管理的 state 目录，并通过 `model_catalog_json` 注入给 Codex；普通 GPT/OpenAI-like profile 不生成 generic managed catalog，继续使用 Codex 自身目录和默认模型元数据；其它配置了非 GPT/OpenAI 系模型且未识别 catalog backing 的 API Profile 视为 fixed，只信 Profile 配置的模型和推理强度。fixed Profile 下手输其它模型或非 Profile 配置的推理强度会被拒绝，切到 fixed Profile 时会清掉旧 model/reasoning override，保留 access/plan。
    3. 非 fixed 场景下，Codex `/model` 与 `/reasoning` 继续按当前 instance-scoped `model.list` 目录校验 `model + reasoning` tuple：已知不支持时普通命令拒绝，已知模型切换时清掉不兼容的旧 reasoning override；未知模型、目录不可用或模型未声明 efforts 时只提示无法本地校验，保留高级手输能力。
+      - `/fast on|off` 只设置当前已选 Codex 会话的下一条普通飞书消息。已有排队消息时须等待其开始执行，正在执行的 turn 不受影响。切档通过原生 `turn/start.serviceTier`，由 Codex 保存会话速度。切换接管目标会丢弃未发出的设置，提问卡补充输入、辅助 turn 和自动续跑不应用待切档。仅当 Codex 模型列表能确认当前模型不支持 Fast 时拒绝该设置；排队前后模型变化时在派发点重新确认。
    4. Codex queue dispatch 与 auto-continue dispatch 在真正生成 `prompt.send` 前会再次检查 frozen override；fixed Profile 下若残留不匹配的 model override，会清空这次 command 的 model/reasoning override、保留 access，并追加 `prompt_override_model_dropped` 全局 runtime notice；非 fixed 场景下若动态目录可判定 `model + reasoning` 不兼容，会清空这次 command 的 reasoning override，保留 model/access，并追加 `prompt_override_reasoning_dropped` 全局 runtime notice。这两类 notice 使用 `prompt_override_guard` family 和 dedupe key，避免同一不兼容组合连续刷屏。
    5. Codex headless 的跨模型组检查先发生在 `/codexprofile` continuation 规划阶段：若当前 pinned thread 的 source 组与目标 Profile 组分别可判定且一个是 `gpt`、另一个是 `non_gpt`，切换不会生成 exact-thread restore，也不会借用 `fresh_workspace` onboarding；它会转换成 `PendingHeadless(Purpose=workspace_route_restart, PrepareNewThread=true)`。该 pending 与 daemon start command 不携带旧 `ThreadID`，`WorkspaceKey` / `ThreadCWD` 进入同一条 `ResolveHeadlessResumeWorkspaceKey(...)` 边界：cwd 位于 workspace root 下时保留稳定 root，cwd 已不属于旧 root 时改以 cwd 作为 workspace claim；旧 managed child 仍会被显式 kill，连回后直接进入 `R5 NewThreadReady`。
    6. 普通 `resume_existing + follow_execution_thread` dispatch 仍保留第二道兼容检查：旧 thread 模型优先取 `CodexEffectiveThread.Model`，再取 `ExplicitModel` / `ThreadSettings.Model` / `LastModelReroute.ToModel`；目标模型优先取非 thread 来源的 prompt config，再取当前 `CodexThreadPolicy` 的 explicit/default 目标。若旧组与目标组分别可判定且不同，本次输入会改写为 `start_new`，surface 同步进入 `R5 NewThreadReady`，`PreparedFromThreadID` 记录旧 thread，`PreparedThreadCWD` 保留原 cwd，并追加 `codex_model_group_new_thread` notice。不可判定或同组时继续复用旧 thread。

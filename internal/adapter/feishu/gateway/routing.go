@@ -311,9 +311,11 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			catalogBackend = ""
 		}
 		var threadID, instanceID, goalOperationID string
-		if actionKind == control.ActionGoalCommand {
+		if actionKind == control.ActionGoalCommand || actionKind == control.ActionFastCommand {
 			threadID = strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyThreadID))
 			instanceID = strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyInstanceID))
+		}
+		if actionKind == control.ActionGoalCommand {
 			goalOperationID = strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyGoalOperationID))
 		}
 		return control.Action{

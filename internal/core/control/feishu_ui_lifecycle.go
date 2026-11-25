@@ -63,7 +63,7 @@ func ResolveFeishuFrontstageActionContract(action Action) FeishuFrontstageAction
 	if _, ok := FeishuUIIntentFromAction(action); ok {
 		contract.RejectsUnstampedCallback = true
 	}
-	if action.Kind == ActionAsyncUserInput || action.Kind == ActionPredictionAccept || action.Kind == ActionPredictionSend {
+	if action.Kind == ActionAsyncUserInput || action.Kind == ActionPredictionAccept || action.Kind == ActionPredictionSend || action.Kind == ActionFastCommand {
 		contract.RejectsUnstampedCallback = true
 	}
 
@@ -153,6 +153,7 @@ func AllowsCommandCardResultReplacement(action Action) bool {
 		ActionUseThread,
 		ActionShowCommandHelp,
 		ActionStatus,
+		ActionFastCommand,
 		ActionCoworkersCommand,
 		ActionTurnPatchCommand,
 		ActionTurnPatchRollback,
@@ -235,6 +236,7 @@ func firstResultCardReplaceableAction(action Action) bool {
 		ActionUseThread,
 		ActionShowCommandHelp,
 		ActionStatus,
+		ActionFastCommand,
 		ActionCoworkersCommand,
 		ActionStop,
 		ActionNewThread,

@@ -41,6 +41,7 @@ func (t *Translator) ObserveClient(raw []byte) (Result, error) {
 		}}}, nil
 	case "thread/resume":
 		threadID, _ := params["threadId"].(string)
+		t.rememberLocalServiceTierRequest(message, threadID, "")
 		cwd, _ := params["cwd"].(string)
 		t.currentThreadID = threadID
 		if cwd != "" {
@@ -60,6 +61,7 @@ func (t *Translator) ObserveClient(raw []byte) (Result, error) {
 			}
 			return Result{}, nil
 		}
+		t.rememberLocalServiceTierRequest(message, "", "")
 		t.latestThreadStartParams = normalizeThreadStartParams(params)
 		return Result{Events: configObservedEvents("", xutil.LookupStringFromAny(params["cwd"]), params, true)}, nil
 	case "turn/start":
@@ -78,6 +80,9 @@ func (t *Translator) ObserveClient(raw []byte) (Result, error) {
 				TrafficClass: agentproto.TrafficClassInternalHelper,
 				Initiator:    agentproto.Initiator{Kind: agentproto.InitiatorInternalHelper},
 			}}}, nil
+		}
+		if tier := agentproto.NormalizeCodexServiceTier(xutil.LookupStringFromAny(params["serviceTier"])); tier != "" && threadID != "" {
+			t.rememberLocalServiceTierRequest(message, threadID, tier)
 		}
 		t.currentThreadID = threadID
 		if cwd != "" {

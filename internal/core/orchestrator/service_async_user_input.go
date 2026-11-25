@@ -220,6 +220,7 @@ func (s *Service) handleAsyncUserInput(surface *state.SurfaceConsoleRecord, acti
 		SurfaceSessionID: surface.SurfaceSessionID, ActorUserID: action.ActorUserID, SourceKind: state.QueueItemSourceUser,
 		SourceMessageID: action.MessageID, SourceMessagePreview: normalizeSourceMessagePreview(strings.Join(text, "\n")), SourceMessageIDs: []string{action.MessageID},
 		Inputs:             []agentproto.Input{{Type: agentproto.InputText, Text: strings.Join(text, "\n")}},
+		AsyncUserInput:     true,
 		FrozenDispatchPlan: agentproto.NormalizePromptDispatchPlan(plan),
 		FrozenOverride:     s.resolveFrozenPromptOverride(inst, surface, record.ThreadID, cwd, state.ModelConfigRecord{}),
 		FrozenPlanMode:     s.freezePlanModeForPrompt(surface), CodexAdmissionRef: s.freezeCodexAdmissionRefForPrompt(surface),

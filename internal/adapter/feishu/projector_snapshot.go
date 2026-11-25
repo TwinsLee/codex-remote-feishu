@@ -18,10 +18,7 @@ const (
 )
 
 func projectSnapshotElements(snapshot control.Snapshot, daemonBinary, currentDirectory string, worktree *gitWorktreeSummary) []map[string]any {
-	return cardkit.AppendTextSections(nil, snapshotSections(snapshot, daemonBinary, currentDirectory, worktree))
-}
-
-func snapshotSections(snapshot control.Snapshot, daemonBinary, currentDirectory string, worktree *gitWorktreeSummary) []control.FeishuCardTextSection {
+	var elements []map[string]any
 	lines := []string{snapshotLine("当前模式", displaySnapshotMode(snapshot.ProductMode, snapshot.Backend))}
 	if profile := formatSnapshotClaudeProfile(snapshot); profile != "" {
 		lines = append(lines, snapshotLine("Claude 配置", profile))
@@ -69,6 +66,24 @@ func snapshotSections(snapshot control.Snapshot, daemonBinary, currentDirectory 
 		default:
 			lines = append(lines, snapshotLine("当前输入目标", "未选择会话"))
 		}
+		if threadID := strings.TrimSpace(snapshot.Attachment.SelectedThreadID); threadID != "" {
+			if strings.ContainsAny(threadID, "<>&`\r\n") {
+				lines = append(lines, snapshotLine("会话 ID", threadID))
+			} else {
+				elements = append(elements, cardkit.PlainTextBlockElement(strings.Join(lines, "\n")), map[string]any{
+					"tag":     "markdown",
+					"content": snapshotLine("会话 ID", markdownCodeSpan(threadID)),
+				})
+				lines = nil
+			}
+		}
+		if snapshot.Backend == agentproto.BackendCodex && snapshot.Attachment.SelectedThreadID != "" {
+			current, pending := snapshot.Attachment.CodexServiceTier, snapshot.Attachment.PendingCodexServiceTier
+			lines = append(lines, snapshotLine("速度档位", control.CodexServiceTierLabel(current)))
+			if pending != "" && pending != current {
+				lines = append(lines, snapshotLine("下条消息的速度", control.CodexServiceTierLabel(pending)))
+			}
+		}
 		if first := strings.TrimSpace(snapshot.Attachment.SelectedThreadFirstUserMessage); first != "" {
 			lines = append(lines, snapshotLine("会话起点", compactSnapshotStatusText(first, snapshotStatusPreviewLimit)))
 		}
@@ -113,7 +128,7 @@ func snapshotSections(snapshot control.Snapshot, daemonBinary, currentDirectory 
 			Lines: headlessLines,
 		})
 	}
-	return sections
+	return cardkit.AppendTextSections(elements, sections)
 }
 
 func snapshotShowsDetachedRoomWorkspaceBinding(snapshot control.Snapshot) bool {

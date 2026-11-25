@@ -6,6 +6,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (s *Service) applyThreadLifecycleUpdate(instanceID string, event agentproto.Event) []eventcontract.Event {
@@ -105,7 +106,25 @@ func (s *Service) applyThreadSettingsUpdate(instanceID string, event agentproto.
 		return nil
 	}
 	thread := s.ensureThread(inst, update.ThreadID)
-	thread.ThreadSettings = agentproto.CloneThreadSettingsUpdate(update)
+	if update.ServiceTier != "" && event.Initiator.Kind == agentproto.InitiatorRemoteSurface {
+		if surface := s.root.Surfaces[event.Initiator.SurfaceSessionID]; surface != nil &&
+			pendingCodexServiceTier(surface, instanceID, update.ThreadID) == update.ServiceTier {
+			surface.PendingCodexServiceTier = state.CodexServiceTierRequest{}
+		}
+	}
+	if previous := thread.ThreadSettings; previous != nil {
+		if update.ServiceTier == "" {
+			update.ServiceTier = previous.ServiceTier
+		} else {
+			// Tier-only observations are independent of model and access settings.
+			update.ModelProviderID = xutil.FirstNonEmpty(update.ModelProviderID, previous.ModelProviderID)
+			update.Model = xutil.FirstNonEmpty(update.Model, previous.Model)
+			update.ReasoningEffort = xutil.FirstNonEmpty(update.ReasoningEffort, previous.ReasoningEffort)
+			update.ApprovalPolicy = xutil.FirstNonEmpty(update.ApprovalPolicy, previous.ApprovalPolicy)
+			update.Sandbox = xutil.FirstNonEmpty(update.Sandbox, previous.Sandbox)
+		}
+	}
+	thread.ThreadSettings = update
 	if strings.TrimSpace(event.PlanMode) != "" {
 		applyObservedPlanMode(thread, event.PlanMode)
 	}

@@ -37,6 +37,7 @@ type ThreadSettingsUpdate struct {
 	ReasoningEffort string `json:"reasoningEffort,omitempty"`
 	ApprovalPolicy  string `json:"approvalPolicy,omitempty"`
 	Sandbox         string `json:"sandbox,omitempty"`
+	ServiceTier     string `json:"serviceTier,omitempty"`
 }
 
 func NormalizeThreadLifecycleAction(value string) ThreadLifecycleAction {
@@ -141,14 +142,26 @@ func NormalizeThreadSettingsUpdate(update *ThreadSettingsUpdate) *ThreadSettings
 		ReasoningEffort: strings.TrimSpace(update.ReasoningEffort),
 		ApprovalPolicy:  strings.TrimSpace(update.ApprovalPolicy),
 		Sandbox:         strings.TrimSpace(update.Sandbox),
+		ServiceTier:     NormalizeCodexServiceTier(update.ServiceTier),
 	}
 	if normalized.ThreadID == "" {
 		return nil
 	}
-	if normalized.ModelProviderID == "" && normalized.Model == "" && normalized.ReasoningEffort == "" && normalized.ApprovalPolicy == "" && normalized.Sandbox == "" {
+	if normalized.ModelProviderID == "" && normalized.Model == "" && normalized.ReasoningEffort == "" && normalized.ApprovalPolicy == "" && normalized.Sandbox == "" && normalized.ServiceTier == "" {
 		return nil
 	}
 	return normalized
+}
+
+func NormalizeCodexServiceTier(value string) string {
+	switch tier := strings.ToLower(strings.TrimSpace(value)); tier {
+	case "fast", "priority":
+		return "fast"
+	case "default", "flex", "ultrafast":
+		return tier
+	default:
+		return ""
+	}
 }
 
 func CloneThreadSettingsUpdate(update *ThreadSettingsUpdate) *ThreadSettingsUpdate {

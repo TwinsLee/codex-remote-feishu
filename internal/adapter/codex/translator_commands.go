@@ -507,6 +507,13 @@ func (t *Translator) directTurnStart(threadID string, command agentproto.Command
 	setDefault(template, "attachments", []any{})
 	applyCodexResumePolicyToTurnStart(template, command.CodexResume)
 	applyPromptOverridesToTurnStart(template, command.Overrides)
+	serviceTier := ""
+	if !command.Target.InternalHelper && !t.internalThreadIDs[threadID] {
+		serviceTier = agentproto.NormalizeCodexServiceTier(command.Overrides.ServiceTier)
+	}
+	if serviceTier != "" {
+		template["serviceTier"] = serviceTier
+	}
 	t.recordCodexPolicyForThread(threadID, command.CodexResume)
 	requestID := t.NextRequest("turn-start")
 	payload := map[string]any{
@@ -518,6 +525,7 @@ func (t *Translator) directTurnStart(threadID string, command agentproto.Command
 		Action:           "turn/start",
 		ThreadID:         threadID,
 		SurfaceSessionID: choose(command.Origin.Surface, command.Origin.ChatID),
+		ServiceTier:      serviceTier,
 	}
 	bytes, err := json.Marshal(payload)
 	if err != nil {

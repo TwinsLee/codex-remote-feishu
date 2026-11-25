@@ -11,7 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
-func (t *Translator) ObserveServer(raw []byte) (Result, error) {
+func (t *Translator) ObserveServer(raw []byte) (result Result, err error) {
 	var message map[string]any
 	if err := json.Unmarshal(raw, &message); err != nil {
 		return Result{}, err
@@ -19,6 +19,13 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 
 	if id, ok := message["id"]; ok {
 		requestID := fmt.Sprint(id)
+		// Read the correlation before the response handlers consume pending requests.
+		tierEvents := t.observeServiceTierResponse(requestID, message)
+		defer func() {
+			if err == nil {
+				result.Events = append(result.Events, tierEvents...)
+			}
+		}()
 		if result, handled := t.observePredictionResponse(requestID, message); handled {
 			return result, nil
 		}

@@ -11,7 +11,7 @@ import (
 	larkcallback "github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 )
 
-func TestParsePageCallbacksPreserveOnlyGoalTarget(t *testing.T) {
+func TestParsePageCallbacksPreserveThreadScopedTargets(t *testing.T) {
 	for _, test := range []struct {
 		name         string
 		callbackKind string
@@ -26,6 +26,11 @@ func TestParsePageCallbacksPreserveOnlyGoalTarget(t *testing.T) {
 		{
 			name: "goal button", callbackKind: cardActionKindPageAction,
 			actionKind: control.ActionGoalCommand, actionArg: "pause", wantText: "/goal pause",
+			wantThread: "thread-original", wantInstance: "instance-original",
+		},
+		{
+			name: "fast button", callbackKind: cardActionKindPageAction,
+			actionKind: control.ActionFastCommand, actionArg: "on", wantText: "/fast on",
 			wantThread: "thread-original", wantInstance: "instance-original",
 		},
 		{

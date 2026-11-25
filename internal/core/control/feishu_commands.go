@@ -30,6 +30,7 @@ const (
 	FeishuCommandAutoContinue         = "autocontinue"
 	FeishuCommandModel                = "model"
 	FeishuCommandReasoning            = "reasoning"
+	FeishuCommandFast                 = "fast"
 	FeishuCommandAccess               = "access"
 	FeishuCommandPlan                 = "plan"
 	FeishuCommandVerbose              = "verbose"
@@ -465,6 +466,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		},
 	},
 	goalCommandSpec(),
+	fastCommandSpec(),
 	openCodeProfileCommandSpec(),
 	{
 		definition: FeishuCommandDefinition{

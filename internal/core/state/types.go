@@ -310,6 +310,12 @@ type ThreadReplayRecord struct {
 	NoticeThemeKey       string
 }
 
+type CodexServiceTierRequest struct {
+	InstanceID string
+	ThreadID   string
+	Tier       string
+}
+
 type SurfaceConsoleRecord struct {
 	SurfaceSessionID string
 	Platform         string
@@ -325,6 +331,7 @@ type SurfaceConsoleRecord struct {
 	CodexConnectionContract *CodexConnectionContract
 	CodexThreadPolicy       *CodexThreadPolicy
 	ContractRefreshPending  bool
+	PendingCodexServiceTier CodexServiceTierRequest `json:"-"`
 	ClaudeProfileID         string
 	OpenCodeProfileID       string
 	OpenCodeAdmissionRef    *OpenCodeAdmissionRef
@@ -792,6 +799,7 @@ type QueueItemRecord struct {
 	ActorUserID           string
 	SourceKind            QueueItemSourceKind
 	AutoContinueEpisodeID string
+	AsyncUserInput        bool `json:"-"`
 	SourceMessageID       string
 	SourceMessagePreview  string
 	SourceMessageIDs      []string

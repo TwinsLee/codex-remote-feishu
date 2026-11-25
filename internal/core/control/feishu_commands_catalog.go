@@ -145,7 +145,7 @@ func feishuCommandDisplayRank(groupID, commandID string) int {
 	case FeishuCommandGroupCurrentWork:
 		return commandRank(commandID, FeishuCommandStop, FeishuCommandCompact, FeishuCommandSteerAll, FeishuCommandNew, FeishuCommandStatus)
 	case FeishuCommandGroupSendSettings:
-		return commandRank(commandID, FeishuCommandMode, FeishuCommandReasoning, FeishuCommandModel, FeishuCommandAccess, FeishuCommandPlan, FeishuCommandVerbose, FeishuCommandAutoContinue)
+		return commandRank(commandID, FeishuCommandMode, FeishuCommandReasoning, FeishuCommandFast, FeishuCommandModel, FeishuCommandAccess, FeishuCommandPlan, FeishuCommandVerbose, FeishuCommandAutoContinue)
 	case FeishuCommandGroupSwitchTarget:
 		return commandRank(
 			commandID,

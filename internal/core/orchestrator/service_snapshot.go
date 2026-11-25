@@ -62,6 +62,7 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 			selectedModelReroute = agentproto.CloneTurnModelReroute(selected.LastModelReroute)
 			selectedAgeText = humanizeRelativeTime(s.now(), selected.LastUsedAt)
 		}
+		currentTier, pendingTier := snapshotCodexServiceTiers(surface, inst)
 		snapshot.Attachment = control.AttachmentSummary{
 			InstanceID:                     inst.InstanceID,
 			ObjectType:                     snapshotAttachmentObjectType(s.normalizeSurfaceProductMode(surface), inst),
@@ -75,6 +76,8 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 			SelectedThreadLastUserMessage:  selectedLastUserMessage,
 			SelectedThreadModelReroute:     selectedModelReroute,
 			SelectedThreadAgeText:          selectedAgeText,
+			CodexServiceTier:               currentTier,
+			PendingCodexServiceTier:        pendingTier,
 			RouteMode:                      string(surface.RouteMode),
 			Abandoning:                     surface.Abandoning,
 		}

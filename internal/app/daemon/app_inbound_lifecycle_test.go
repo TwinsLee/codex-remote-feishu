@@ -1,12 +1,78 @@
 package daemon
 
 import (
+	"context"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
+
+func TestFeishuDelayedControlActionDoesNotInterruptOrDetach(t *testing.T) {
+	for _, command := range []struct {
+		kind control.ActionKind
+		text string
+	}{{control.ActionDetach, "/detach"}, {control.ActionStop, "/stop"}} {
+		t.Run(command.text, func(t *testing.T) {
+			ctx := context.Background()
+			gateway := newLifecycleGateway()
+			app := New(":0", ":0", gateway, agentproto.ServerIdentity{PID: 42, StartedAt: time.Now().Add(-2 * time.Hour)})
+			const surfaceID = "feishu:codex2:user:user-1"
+			app.service.UpsertInstance(&state.InstanceRecord{
+				InstanceID: "inst-1", Online: true, WorkspaceRoot: "/work", WorkspaceKey: "/work",
+				Threads: map[string]*state.ThreadRecord{"thread-1": {ThreadID: "thread-1", CWD: "/work"}},
+			})
+			app.service.MaterializeSurface(surfaceID, "codex2", "chat-1", "user-1")
+			app.service.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: surfaceID, InstanceID: "inst-1"})
+			app.service.ApplySurfaceAction(control.Action{Kind: control.ActionUseThread, SurfaceSessionID: surfaceID, ThreadID: "thread-1"})
+			app.service.ApplySurfaceAction(control.Action{Kind: control.ActionTextMessage, SurfaceSessionID: surfaceID, Text: "运行测试"})
+			app.service.ApplyAgentEvent("inst-1", agentproto.Event{Kind: agentproto.EventTurnStarted, ThreadID: "thread-1", TurnID: "turn-1"})
+			surface := app.service.Surface(surfaceID)
+			queueID := surface.ActiveQueueItemID
+			if surface.SelectedThreadID != "thread-1" || queueID == "" {
+				t.Fatal("test must start with a selected thread and active remote work")
+			}
+			store := surfaceresume.NewStore(surfaceresume.StatePath(t.TempDir()))
+			app.surfaceResumeRuntime.store = store
+			if err := store.Put(surfaceresume.Entry{
+				SurfaceSessionID: surfaceID, GatewayID: "codex2", ChatID: "chat-1", ActorUserID: "user-1", ResumeThreadID: "thread-1",
+			}); err != nil {
+				t.Fatal(err)
+			}
+			var interrupts []string
+			app.sendAgentCommand = func(_ string, outbound agentproto.Command) error {
+				if outbound.Kind == agentproto.CommandTurnInterrupt {
+					interrupts = append(interrupts, outbound.Target.TurnID)
+				}
+				return nil
+			}
+			action := control.Action{
+				Kind: command.kind, Text: command.text, GatewayID: "codex2", SurfaceSessionID: surfaceID, ChatID: "chat-1", ActorUserID: "user-1",
+				Inbound: &control.ActionInboundMeta{EventID: "old", MessageCreateTime: time.Now().Add(-65 * time.Minute)},
+			}
+			app.HandleGatewayAction(ctx, action)
+			if len(interrupts) != 0 || surface.Abandoning || surface.SelectedThreadID != "thread-1" || surface.ActiveQueueItemID != queueID {
+				t.Fatal("the delayed command changed the current attachment or work")
+			}
+			if entry, ok := store.Get(surfaceID); !ok || entry.ResumeThreadID != "thread-1" {
+				t.Fatal("the delayed command removed the persisted recovery target")
+			}
+			ops := gateway.snapshotOperations()
+			if len(ops) == 0 || !strings.Contains(operationCardText(ops[len(ops)-1]), "请重新发送 "+command.text) {
+				t.Fatal("the delayed command did not produce a retry notice")
+			}
+			action.Inbound = &control.ActionInboundMeta{EventID: "fresh", MessageCreateTime: time.Now()}
+			app.HandleGatewayAction(ctx, action)
+			if len(interrupts) != 1 || interrupts[0] != "turn-1" {
+				t.Fatalf("the fresh command must interrupt the current turn, got %v", interrupts)
+			}
+		})
+	}
+}
 
 func TestClassifyInboundActionMarksOldMessage(t *testing.T) {
 	startedAt := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)

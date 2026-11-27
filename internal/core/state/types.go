@@ -245,6 +245,7 @@ type InstanceRecord struct {
 	ObservedFocusedThreadID   string
 	ActiveThreadID            string
 	ActiveTurnID              string
+	LastTurnStartedAt         time.Time `json:"-"`
 	ModelCatalog              *agentproto.ModelCatalogSnapshot
 	LastCapabilityState       *agentproto.CapabilityStateUpdate
 	ProtocolNotices           []agentproto.ProtocolNotice
@@ -342,6 +343,7 @@ type SurfaceConsoleRecord struct {
 	AttachedInstanceID      string
 	SelectedThreadID        string
 	LastInboundAt           time.Time
+	ControlTargetChangedAt  time.Time `json:"-"`
 	RouteMode               RouteMode
 	Abandoning              bool
 	DispatchMode            DispatchMode

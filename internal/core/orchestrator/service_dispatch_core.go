@@ -89,6 +89,7 @@ func (s *Service) activateSurfaceQueueItemDispatchWithBinding(surface *state.Sur
 	}
 	item.Status = state.QueueItemDispatching
 	s.setSurfaceActiveQueueItem(surface, item.ID)
+	surface.ControlTargetChangedAt = s.now()
 	_ = s.reserveFeishuRoomActiveSlot(surface, "dispatching")
 	if binding != nil {
 		binding.Status = string(item.Status)

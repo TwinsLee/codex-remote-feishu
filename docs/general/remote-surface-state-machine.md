@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-11-25`
-> Summary: 补充 Codex 会话速度档位、下一句建议与异步投递规则。
+> Updated: `2026-11-27`
+> Summary: 补充飞书停止和解除接管命令对原操作目标的校验。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -1743,6 +1743,8 @@ daemon startup 的 vscode resume 额外规则：
    5. 不清持久化恢复目标，由 daemon 运行态按 backoff 控制后续 retry；同目标 entry 的展示元数据刷新不会重置这份 backoff / last notice 状态
 
 ### 5.5 detach / abandoning 生命周期
+
+飞书 `/stop` 和 `/detach` 在进入下面的状态转换之前，先核对命令发送或点击时的操作目标。命令早于当前接管、正在派发的工作或所跟踪任务的开始，或者服务缺少必要的时间信息时，提示重新发送。已接受的更新输入也会让更早的命令失效，以保护新提交的排队或暂存输入。被拒绝的命令保留现有接管、恢复目标和执行状态。
 
 ```text
 /detach

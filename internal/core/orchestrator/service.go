@@ -782,6 +782,9 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) (re
 		preface = append(preface, s.maybeSealPlanProposalForTurnStart(instanceID, event.ThreadID, event.TurnID)...)
 		trackActiveTurn := s.shouldTrackInstanceActiveTurn(instanceID, event)
 		if trackActiveTurn {
+			if inst.ActiveTurnID != event.TurnID || inst.ActiveThreadID != event.ThreadID {
+				inst.LastTurnStartedAt = s.now()
+			}
 			inst.ActiveTurnID = event.TurnID
 			inst.ActiveThreadID = event.ThreadID
 		}

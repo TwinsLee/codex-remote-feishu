@@ -9,6 +9,73 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
+func TestFeishuStopAndDetachKeepTheirOriginalTargets(t *testing.T) {
+	for _, kind := range []control.ActionKind{control.ActionStop, control.ActionDetach} {
+		for _, tc := range []struct {
+			name      string
+			source    string
+			change    string
+			wantBlock bool
+		}{
+			{name: "late command predates current turn", source: "message", change: "turn", wantBlock: true},
+			{name: "late menu click predates current turn", source: "menu", change: "turn", wantBlock: true},
+			{name: "late card click predates current turn", source: "card", change: "turn", wantBlock: true},
+			{name: "late command predates new attachment", source: "message", change: "route", wantBlock: true},
+			{name: "missing action time cannot establish target", source: "missing", wantBlock: true},
+			{name: "late command still targets the same turn", source: "message"},
+			{name: "new card click still targets the same turn", source: "card"},
+		} {
+			t.Run(string(kind)+"/"+tc.name, func(t *testing.T) {
+				now := time.Date(2026, 11, 27, 20, 29, 0, 0, time.UTC)
+				svc := newServiceForTest(&now)
+				surfaceID := "feishu:codex2:user:user-1"
+				svc.UpsertInstance(&state.InstanceRecord{
+					InstanceID: "inst-1", Online: true, WorkspaceRoot: "/work", WorkspaceKey: "/work",
+					Threads: map[string]*state.ThreadRecord{"thread-1": {ThreadID: "thread-1", CWD: "/work"}},
+				})
+				attach := control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: surfaceID, InstanceID: "inst-1"}
+				svc.ApplySurfaceAction(attach)
+				svc.ApplySurfaceAction(control.Action{Kind: control.ActionUseThread, SurfaceSessionID: surfaceID, ThreadID: "thread-1"})
+				svc.ApplySurfaceAction(control.Action{Kind: control.ActionTextMessage, SurfaceSessionID: surfaceID, MessageID: "prompt-1", Text: "运行测试"})
+				start := agentproto.Event{Kind: agentproto.EventTurnStarted, ThreadID: "thread-1", TurnID: "turn-1"}
+				if tc.change == "" {
+					svc.ApplyAgentEvent("inst-1", start)
+				}
+				sent := now.Add(time.Minute)
+				now = sent.Add(64 * time.Minute)
+				switch tc.change {
+				case "turn":
+					svc.ApplyAgentEvent("inst-1", start)
+				case "route":
+					svc.ApplySurfaceAction(control.Action{Kind: control.ActionDetach, SurfaceSessionID: surfaceID})
+					svc.ApplySurfaceAction(attach)
+				}
+				if tc.source == "card" && tc.change == "" {
+					sent = now
+				}
+				now = now.Add(time.Minute)
+				meta := &control.ActionInboundMeta{EventID: "feishu-event"}
+				switch tc.source {
+				case "message":
+					meta.MessageCreateTime = sent
+					meta.EventCreateTime = now
+				case "menu":
+					meta.MenuClickTime = sent
+					meta.EventCreateTime = now
+				case "card":
+					meta.CardCallback = true
+					meta.MessageCreateTime = sent.Add(-time.Hour)
+					meta.EventCreateTime = sent
+				}
+				rejection := svc.FeishuControlTargetRejection(control.Action{Kind: kind, GatewayID: "codex2", SurfaceSessionID: surfaceID, Inbound: meta})
+				if got := rejection != nil; got != tc.wantBlock {
+					t.Fatalf("rejection = %v, want %v (%+v)", got, tc.wantBlock, rejection)
+				}
+			})
+		}
+	}
+}
+
 func TestStopInterruptsActiveTurnAndDiscardsQueuedMessages(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

@@ -1,8 +1,8 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-11-26`
-> Summary: 补充执行权限档位与恢复默认权限按钮的展示规则。
+> Updated: `2026-11-27`
+> Summary: 记录飞书停止和解除接管命令通过生命周期检查后的目标校验。
 
 ## 1. 文档定位
 
@@ -783,6 +783,8 @@ MCP request 卡片当前新增的可视语义：
 | `old_card` | callback 带 `daemon_lifecycle_id` 且与当前 daemon 不匹配；或 callback 命中 `FeishuUIIntent` 但缺少 `daemon_lifecycle_id` | 发“旧卡片已过期” notice，不进入产品处理，也不会 replace 当前卡；review final card 的 `Review 待提交内容` / `继续追问审阅` / `退出审阅` / `按审阅意见继续修改` 也完全复用这条拒绝路径 |
 
 拒绝提示里的动作详情只负责解释“哪次旧动作被忽略”，不参与 product mutation。command 类动作的 label/command 由 `FeishuCommandBinding` 与 command catalog 统一提供；无法解析到 catalog 的 owner-card、picker、request 或 review exit/apply 等本地 callback 使用 UI-only local label。
+
+通过上述检查的飞书 `/stop` 和 `/detach` 还要校验当前操作目标。文字入口使用消息发送时间，菜单使用点击时间，卡片使用回调事件时间。缺少时间或无法确认目标时，追加「请重新发送命令」，当前卡和操作目标保留。详情见 [远程面接管生命周期](./remote-surface-state-machine.md#55-detach--abandoning-生命周期)。
 
 通过 lifecycle gate 的当前 callback 若命中 room workspace 恢复冲突，会在 frontstage contract / owner mutation 之前停止：daemon append 一张独立冲突提示并返回 `nil` action result，原卡保持不变。这个 gate 不得提前到 lifecycle 判定之前，否则旧卡会被错误解释为当前 room 操作；也不得进入 inline replacement，否则会把诊断提示伪装成菜单或 owner card 的业务结果。
 

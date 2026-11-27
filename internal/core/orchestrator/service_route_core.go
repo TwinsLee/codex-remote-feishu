@@ -60,6 +60,11 @@ func (s *Service) transitionSurfaceRouteCore(surface *state.SurfaceConsoleRecord
 	sameAttachment := next.AttachedInstanceID != "" && currentAttachedInstanceID != "" && currentAttachedInstanceID == next.AttachedInstanceID
 	currentWorkspaceKey := s.surfaceCurrentWorkspaceKeyRaw(surface)
 	sameWorkspaceClaim := sameAttachment && surfaceUsesWorkspaceClaimsRaw(surface) && currentWorkspaceKey != "" && currentWorkspaceKey == next.WorkspaceKey
+	if currentAttachedInstanceID != next.AttachedInstanceID || currentWorkspaceKey != next.WorkspaceKey ||
+		surface.RouteMode != next.RouteMode || surface.SelectedThreadID != next.SelectedThreadID ||
+		surface.PreparedThreadCWD != next.PreparedThreadCWD || surface.PreparedFromThreadID != next.PreparedFromThreadID {
+		surface.ControlTargetChangedAt = s.now()
+	}
 
 	s.releaseSurfaceThreadClaim(surface)
 	if !sameAttachment || next.AttachedInstanceID == "" {

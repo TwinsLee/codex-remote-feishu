@@ -249,6 +249,19 @@ func (a *App) handleActionLocked(ctx context.Context, action control.Action, opt
 		}
 		return nil
 	}
+	if notice := a.service.FeishuControlTargetRejection(action); notice != nil {
+		log.Printf("feishu control target unconfirmed: surface=%s kind=%s event=%s", action.SurfaceSessionID, action.Kind, action.Inbound.EventID)
+		if a.service.Surface(action.SurfaceSessionID) == nil {
+			a.ensureSurfaceRouteForNotice(action)
+		}
+		a.handleUIEventsLocked(ctx, []eventcontract.Event{{
+			Kind:             eventcontract.KindNotice,
+			GatewayID:        action.GatewayID,
+			SurfaceSessionID: action.SurfaceSessionID,
+			Notice:           notice,
+		}})
+		return nil
+	}
 	if notice := a.feishuRoomWorkspaceConflictNotice(action); notice != nil {
 		a.ensureSurfaceRouteForNotice(action)
 		a.handleUIEventsLocked(ctx, []eventcontract.Event{{
